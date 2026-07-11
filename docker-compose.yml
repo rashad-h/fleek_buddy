@@ -22,8 +22,12 @@ services:
     ports:
       - '3000:3000'
     environment:
-      # Vite dev-server proxies /api to this address (see ui/vite.config.ts).
-      BACKEND_URL: http://backend:8000
+      # Nitro /api proxy target. Override for merchant mode (host API):
+      # BACKEND_URL=http://host.docker.internal:8000
+      BACKEND_URL: ${BACKEND_URL:-http://backend:8000}
+      # Browser calls API directly (bypasses proxy). Set for merchant mode:
+      # VITE_API_URL=http://localhost:8000/api
+      VITE_API_URL: ${VITE_API_URL:-}
     volumes:
       - ./ui:/app
       - /app/node_modules

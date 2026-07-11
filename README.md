@@ -131,6 +131,45 @@ reply (and non-negotiable items always work), but real haggling needs a key.
 | `make makemigration m="..."` | Autogenerate a migration                       |
 | `make logs` / `make logs-ui` | Tail backend / ui logs                         |
 | `make lint` / `make format`  | Ruff + ESLint / Ruff + Prettier                |
+| `make dev-merchant`          | UI + Postgres only (pair with `dev-backend-host`) |
+| `make dev-backend-host`      | Run API on host (stops Docker backend; frees :8000) |
+
+## Merchant dashboard (`/merchant`)
+
+Suppliers upload a haul video; the API extracts garment frames with
+`Vision/pySceneDetect`, then describes each frame with Gemini (`Vision/vlm`,
+`--workers 6`). Results stream to the UI as SSE events.
+
+1. Set up Vision envs once:
+
+```bash
+make setup-vision-envs
+# add GEMINI_API_KEY to Vision/vlm/.env and root .env
+```
+
+2. Add `GEMINI_API_KEY` to the root `.env` (and `Vision/vlm/.env`).
+
+3. In **two terminals**, start UI + host API (Docker backend must not own
+   port 8000):
+
+```bash
+# terminal 1 — UI + Postgres (talks to host API on :8000)
+make dev-merchant
+
+# terminal 2 — API on host (creates backend/.venv on first run)
+make dev-backend-host
+```
+
+Restart **both** after pulling this change so `VITE_API_URL` is picked up.
+
+If you already ran `make dev`, stop the Docker API first:
+`docker compose stop backend`, then run `make dev-backend-host`.
+
+4. Open http://localhost:3000/merchant — upload a video or click **Use demo
+   sample** (bundled under `Vision/sample_video/`).
+
+Uploaded videos and extracted frames are stored under
+`backend/data/merchant_jobs/{job_id}/` (gitignored).
 
 ## Troubleshooting
 
@@ -143,7 +182,13 @@ reply (and non-negotiable items always work), but real haggling needs a key.
 - **Chat doesn't stream** — the Vite proxy should pass SSE through; as a
   fallback set `VITE_API_URL=http://localhost:8000/api` for the ui service
   (backend CORS already allows it) and restart.
-- **Port clashes** — 3000, 8000 and 5432 must be free.
+- **Port clashes** — 3000, 8000 and 5432 must be free. `Address already in use`
+  on 8000 means Docker backend is still running; use `make dev-backend-host`
+  (it stops it) or `docker compose stop backend`.
+- **Merchant job fails immediately** — run `make dev-backend-host` (not the
+  Docker backend) and confirm Vision venvs + `GEMINI_API_KEY` are set.
+- **No frames extracted** — check `Vision/sample_video/` exists and
+  `Vision/pySceneDetect/.venv` is installed.
 
 ## Layout
 
@@ -155,12 +200,13 @@ backend/
 │   ├── schemas.py         # public read/write schemas (no seller secrets)
 │   ├── llm.py             # LiteLLM wrapper + structured output
 │   ├── agent/             # seller agent: context, policy, negotiator, prompts
-│   └── routers/           # items (read-only), negotiations (+ SSE)
+│   ├── merchant/          # video job store + Vision pipeline orchestration
+│   └── routers/           # items, negotiations, merchant (+ SSE)
 ├── alembic/               # migrations (auto-applied on start)
 └── seed.py                # demo catalogue
 ui/
 └── src/
-    ├── routes/            # index (dashboard), items.$itemId (detail)
-    ├── components/        # ProductCard, OfferModal, NegotiationDrawer
-    └── lib/               # api client + SSE parser, types, buyer id
+    ├── routes/            # index (dashboard), items.$itemId, merchant
+    ├── components/        # ProductCard, OfferModal, NegotiationDrawer, merchant/*
+    └── lib/               # api client + SSE parser, merchant-api, types
 ```

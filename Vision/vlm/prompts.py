@@ -23,6 +23,8 @@ Rules:
 - buyer_objection_risks: at most 3 risks a buyer might raise (blur, missing size
   tag, wear, occlusion). Empty list if none.
 - Prefer plain catalog language over marketing fluff.
+- material_guess: visual fabric only (cotton, denim, synthetic, fleece, knit, etc.).
+  Never claim fiber %; use unknown if unclear.
 - Set needs_review=true when the frame is blurry, heavily occluded, or you are
   unsure about category/brand/color.
 - confidence is your overall certainty from 0 to 1.

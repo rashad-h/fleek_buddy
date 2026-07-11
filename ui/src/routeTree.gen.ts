@@ -9,10 +9,16 @@
 // Additionally, you should also exclude this file from your linter and/or formatter to prevent it from being checked or modified.
 
 import { Route as rootRouteImport } from './routes/__root'
+import { Route as MerchantRouteImport } from './routes/merchant'
 import { Route as IndexRouteImport } from './routes/index'
 import { Route as ItemsItemIdRouteImport } from './routes/items.$itemId'
 import { Route as ApiSplatRouteImport } from './routes/api.$'
 
+const MerchantRoute = MerchantRouteImport.update({
+  id: '/merchant',
+  path: '/merchant',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
@@ -31,36 +37,47 @@ const ApiSplatRoute = ApiSplatRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/merchant': typeof MerchantRoute
   '/api/$': typeof ApiSplatRoute
   '/items/$itemId': typeof ItemsItemIdRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/merchant': typeof MerchantRoute
   '/api/$': typeof ApiSplatRoute
   '/items/$itemId': typeof ItemsItemIdRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/merchant': typeof MerchantRoute
   '/api/$': typeof ApiSplatRoute
   '/items/$itemId': typeof ItemsItemIdRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/$' | '/items/$itemId'
+  fullPaths: '/' | '/merchant' | '/api/$' | '/items/$itemId'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/$' | '/items/$itemId'
-  id: '__root__' | '/' | '/api/$' | '/items/$itemId'
+  to: '/' | '/merchant' | '/api/$' | '/items/$itemId'
+  id: '__root__' | '/' | '/merchant' | '/api/$' | '/items/$itemId'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  MerchantRoute: typeof MerchantRoute
   ApiSplatRoute: typeof ApiSplatRoute
   ItemsItemIdRoute: typeof ItemsItemIdRoute
 }
 
 declare module '@tanstack/react-router' {
   interface FileRoutesByPath {
+    '/merchant': {
+      id: '/merchant'
+      path: '/merchant'
+      fullPath: '/merchant'
+      preLoaderRoute: typeof MerchantRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/': {
       id: '/'
       path: '/'
@@ -87,6 +104,7 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  MerchantRoute: MerchantRoute,
   ApiSplatRoute: ApiSplatRoute,
   ItemsItemIdRoute: ItemsItemIdRoute,
 }

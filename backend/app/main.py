@@ -1,8 +1,12 @@
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import items, negotiations
+from app.routers import items, merchant, negotiations
+
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(title="Fleek Buddy API")
 
@@ -15,6 +19,7 @@ app.add_middleware(
 
 app.include_router(items.router, prefix="/api")
 app.include_router(negotiations.router, prefix="/api")
+app.include_router(merchant.router, prefix="/api")
 
 
 @app.get("/health")

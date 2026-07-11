@@ -364,6 +364,7 @@ def build_item(seed: BundleSeed) -> Item:
         shipping_days_min=seed["shipping_days_min"],
         shipping_days_max=seed["shipping_days_max"],
         image_url=seed["image_url"],
+        image_urls=[seed["image_url"]],
         negotiable=seed["negotiable"],
         high_quantity=seed["high_quantity"],
         buying_price=(bundle * Decimal(seed["buying_ratio"])).quantize(TWO_PLACES),

@@ -60,6 +60,7 @@ class Item(Base):
     shipping_days_max: Mapped[int]
     is_single_brand: Mapped[bool] = mapped_column(default=True)
     image_url: Mapped[str]
+    image_urls: Mapped[list[str]] = mapped_column(JSONB, default=list)
 
     negotiable: Mapped[bool] = mapped_column(default=True)
     high_quantity: Mapped[bool] = mapped_column(default=False)

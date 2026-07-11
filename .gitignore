@@ -20,5 +20,9 @@ Vision/vlm/outputs/*
 !Vision/vlm/outputs/.gitkeep
 .DS_Store
 
+# Merchant job uploads (local demo)
+backend/data/merchant_jobs/
+ui/public/merchant/
+
 # Misc
 specs/

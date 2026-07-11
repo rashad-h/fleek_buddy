@@ -38,6 +38,7 @@ class ItemRead(BaseModel):
     shipping_days_max: int
     is_single_brand: bool
     image_url: str
+    image_urls: list[str] = []
     negotiable: bool
     high_quantity: bool
     created_at: datetime

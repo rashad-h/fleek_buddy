@@ -31,6 +31,13 @@ class GarmentAttributes(BaseModel):
     color_secondary: list[str] = Field(
         default_factory=list, description="Secondary colors if any"
     )
+    material_guess: str = Field(
+        default="unknown",
+        description=(
+            "Visual fabric guess from texture/drape/sheen, e.g. cotton, denim, "
+            "synthetic, fleece, wool-look, leather; unknown if unclear"
+        ),
+    )
     pattern: str = Field(
         default="solid",
         description="solid, striped, checked, logo_print, camouflage, other",

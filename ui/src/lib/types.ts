@@ -16,6 +16,7 @@ export type Item = {
   shipping_days_max: number
   is_single_brand: boolean
   image_url: string
+  image_urls?: Array<string>
   negotiable: boolean
   high_quantity: boolean
   created_at: string

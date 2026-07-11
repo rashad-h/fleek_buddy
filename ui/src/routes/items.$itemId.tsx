@@ -22,6 +22,7 @@ function ItemPage() {
     null,
   )
   const [autoRespond, setAutoRespond] = useState(false)
+  const [activeImage, setActiveImage] = useState<string | null>(null)
 
   useEffect(() => {
     setBuyerId(getBuyerId())
@@ -38,6 +39,20 @@ function ItemPage() {
     enabled: buyerId !== '',
   })
 
+  const gallery =
+    item?.image_urls && item.image_urls.length > 0
+      ? item.image_urls
+      : item
+        ? [item.image_url]
+        : []
+  const galleryKey = gallery.join('|')
+
+  useEffect(() => {
+    if (gallery.length > 0) {
+      setActiveImage(gallery[0])
+    }
+  }, [itemId, galleryKey])
+
   if (isLoading || !item) {
     return (
       <main className="mx-auto max-w-5xl px-6 py-12 text-center text-muted-foreground">
@@ -52,19 +67,45 @@ function ItemPage() {
     setDrawerOpen(true)
   }
 
+  const displayImage = activeImage ?? gallery[0] ?? item.image_url
+
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
       <div className="grid gap-8 md:grid-cols-2">
-        <div className="relative overflow-hidden rounded-lg border bg-muted">
-          <img
-            src={item.image_url}
-            alt={item.title}
-            className="aspect-square w-full object-cover"
-          />
-          {item.discount_percent != null && (
-            <span className="absolute top-3 left-3 rounded-md bg-sale px-2.5 py-1 text-sm font-bold text-white">
-              -{item.discount_percent}%
-            </span>
+        <div className="space-y-3">
+          <div className="relative overflow-hidden rounded-lg border bg-muted">
+            <img
+              src={displayImage}
+              alt={item.title}
+              className="aspect-square w-full object-cover"
+            />
+            {item.discount_percent != null && (
+              <span className="absolute top-3 left-3 rounded-md bg-sale px-2.5 py-1 text-sm font-bold text-white">
+                -{item.discount_percent}%
+              </span>
+            )}
+          </div>
+          {gallery.length > 1 && (
+            <div className="grid grid-cols-4 gap-2 sm:grid-cols-5">
+              {gallery.map((url) => (
+                <button
+                  key={url}
+                  type="button"
+                  onClick={() => setActiveImage(url)}
+                  className={`overflow-hidden rounded-md border bg-muted ${
+                    displayImage === url
+                      ? 'ring-2 ring-accent ring-offset-1'
+                      : 'opacity-80 hover:opacity-100'
+                  }`}
+                >
+                  <img
+                    src={url}
+                    alt=""
+                    className="aspect-square w-full object-cover"
+                  />
+                </button>
+              ))}
+            </div>
           )}
         </div>
         <ItemSummary
