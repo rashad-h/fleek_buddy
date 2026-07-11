@@ -1,0 +1,378 @@
+{
+  "model": "gemini/gemini-3.5-flash",
+  "crops_dir": "/Users/maria.papz/Desktop/fleek_buddy/Vision/pySceneDetect/frames",
+  "count": 15,
+  "needs_review": 1,
+  "listings": [
+    {
+      "crop_path": "/Users/maria.papz/Desktop/fleek_buddy/Vision/pySceneDetect/frames/item_001.jpg",
+      "attributes": {
+        "category": "vest",
+        "subcategory": "gilet",
+        "brand": "The North Face",
+        "color_primary": "black",
+        "color_secondary": [],
+        "pattern": "solid",
+        "material_guess": "synthetic",
+        "gender_style": "unisex",
+        "visible_text": [],
+        "condition_visible": "used_good",
+        "defects_visible": [],
+        "short_title": "Black The North Face quilted vest",
+        "description": "This black quilted vest from The North Face features a full-zip front, high collar, and a subtle tonal logo on the chest.",
+        "confidence": 0.85,
+        "needs_review": true
+      },
+      "model": "gemini/gemini-3.5-flash",
+      "error": null
+    },
+    {
+      "crop_path": "/Users/maria.papz/Desktop/fleek_buddy/Vision/pySceneDetect/frames/item_002.jpg",
+      "attributes": {
+        "category": "jacket",
+        "subcategory": "softshell",
+        "brand": "The North Face",
+        "color_primary": "maroon",
+        "color_secondary": [
+          "pink"
+        ],
+        "pattern": "solid",
+        "material_guess": "synthetic",
+        "gender_style": "womens",
+        "visible_text": [
+          "The North Face"
+        ],
+        "condition_visible": "used_excellent",
+        "defects_visible": [],
+        "short_title": "Maroon The North Face Hooded Softshell Jacket",
+        "description": "A women's maroon full-zip hooded softshell jacket from The North Face, featuring zippered hand pockets and a pink embroidered chest logo.",
+        "confidence": 0.95,
+        "needs_review": false
+      },
+      "model": "gemini/gemini-3.5-flash",
+      "error": null
+    },
+    {
+      "crop_path": "/Users/maria.papz/Desktop/fleek_buddy/Vision/pySceneDetect/frames/item_003.jpg",
+      "attributes": {
+        "category": "jacket",
+        "subcategory": "softshell",
+        "brand": "The North Face",
+        "color_primary": "purple",
+        "color_secondary": [
+          "grey"
+        ],
+        "pattern": "solid",
+        "material_guess": "synthetic",
+        "gender_style": "womens",
+        "visible_text": [
+          "The North Face"
+        ],
+        "condition_visible": "used_excellent",
+        "defects_visible": [],
+        "short_title": "Purple The North Face softshell jacket",
+        "description": "This purple The North Face softshell jacket features grey side panels, zippered pockets, and a high collar. It has the brand logo embroidered on the chest.",
+        "confidence": 0.95,
+        "needs_review": false
+      },
+      "model": "gemini/gemini-3.5-flash",
+      "error": null
+    },
+    {
+      "crop_path": "/Users/maria.papz/Desktop/fleek_buddy/Vision/pySceneDetect/frames/item_004.jpg",
+      "attributes": {
+        "category": "vest",
+        "subcategory": "softshell vest",
+        "brand": "The North Face",
+        "color_primary": "grey",
+        "color_secondary": [
+          "black"
+        ],
+        "pattern": "solid",
+        "material_guess": "synthetic",
+        "gender_style": "mens",
+        "visible_text": [
+          "The North Face"
+        ],
+        "condition_visible": "used_good",
+        "defects_visible": [],
+        "short_title": "Grey The North Face Softshell Vest",
+        "description": "This grey The North Face softshell vest features a full-zip front, zippered hand pockets, and a circular patch on the left chest. Finished with the classic white embroidered logo near the bottom hem.",
+        "confidence": 0.9,
+        "needs_review": false
+      },
+      "model": "gemini/gemini-3.5-flash",
+      "error": null
+    },
+    {
+      "crop_path": "/Users/maria.papz/Desktop/fleek_buddy/Vision/pySceneDetect/frames/item_005.jpg",
+      "attributes": {
+        "category": "vest",
+        "subcategory": "gilet",
+        "brand": null,
+        "color_primary": "black",
+        "color_secondary": [],
+        "pattern": "solid",
+        "material_guess": "synthetic",
+        "gender_style": "unisex",
+        "visible_text": [],
+        "condition_visible": "used_good",
+        "defects_visible": [],
+        "short_title": "Black zip-up vest gilet",
+        "description": "A classic black zip-up vest featuring a high collar and side pockets. Perfect for layering in cooler weather.",
+        "confidence": 0.9,
+        "needs_review": false
+      },
+      "model": "gemini/gemini-3.5-flash",
+      "error": null
+    },
+    {
+      "crop_path": "/Users/maria.papz/Desktop/fleek_buddy/Vision/pySceneDetect/frames/item_006.jpg",
+      "attributes": {
+        "category": "jacket",
+        "subcategory": "fleece jacket",
+        "brand": "The North Face",
+        "color_primary": "blue",
+        "color_secondary": [],
+        "pattern": "solid",
+        "material_guess": "synthetic",
+        "gender_style": "unisex",
+        "visible_text": [
+          "The North Face"
+        ],
+        "condition_visible": "used_good",
+        "defects_visible": [],
+        "short_title": "Blue The North Face Full-Zip Jacket",
+        "description": "This slate blue full-zip jacket from The North Face features a high collar, side pockets, and the signature white logo embroidered on the left chest.",
+        "confidence": 0.95,
+        "needs_review": false
+      },
+      "model": "gemini/gemini-3.5-flash",
+      "error": null
+    },
+    {
+      "crop_path": "/Users/maria.papz/Desktop/fleek_buddy/Vision/pySceneDetect/frames/item_007.jpg",
+      "attributes": {
+        "category": "jacket",
+        "subcategory": "softshell",
+        "brand": "The North Face",
+        "color_primary": "black",
+        "color_secondary": [],
+        "pattern": "solid",
+        "material_guess": "synthetic",
+        "gender_style": "mens",
+        "visible_text": [
+          "THE NORTH FACE",
+          "lifeproof"
+        ],
+        "condition_visible": "used_excellent",
+        "defects_visible": [],
+        "short_title": "Black The North Face Lifeproof Softshell Jacket",
+        "description": "A black full-zip softshell jacket from The North Face, featuring a co-branded 'Lifeproof' logo on the right chest and zippered hand pockets.",
+        "confidence": 0.95,
+        "needs_review": false
+      },
+      "model": "gemini/gemini-3.5-flash",
+      "error": null
+    },
+    {
+      "crop_path": "/Users/maria.papz/Desktop/fleek_buddy/Vision/pySceneDetect/frames/item_008.jpg",
+      "attributes": {
+        "category": "jacket",
+        "subcategory": "rain jacket",
+        "brand": "The North Face",
+        "color_primary": "black",
+        "color_secondary": [],
+        "pattern": "solid",
+        "material_guess": "synthetic",
+        "gender_style": "unisex",
+        "visible_text": [
+          "The North Face"
+        ],
+        "condition_visible": "used_excellent",
+        "defects_visible": [],
+        "short_title": "Black The North Face hooded jacket",
+        "description": "A classic black hooded jacket from The North Face featuring a white embroidered logo on the chest, full-zip front, and side pockets.",
+        "confidence": 0.95,
+        "needs_review": false
+      },
+      "model": "gemini/gemini-3.5-flash",
+      "error": null
+    },
+    {
+      "crop_path": "/Users/maria.papz/Desktop/fleek_buddy/Vision/pySceneDetect/frames/item_009.jpg",
+      "attributes": {
+        "category": "jacket",
+        "subcategory": "softshell",
+        "brand": "Cisco Webex",
+        "color_primary": "black",
+        "color_secondary": [],
+        "pattern": "solid",
+        "material_guess": "synthetic",
+        "gender_style": "unisex",
+        "visible_text": [
+          "cisco Webex"
+        ],
+        "condition_visible": "used_excellent",
+        "defects_visible": [],
+        "short_title": "Black Cisco Webex Softshell Jacket",
+        "description": "This black full-zip softshell jacket features a hood, zippered hand pockets, and a white Cisco Webex logo embroidered on the left chest.",
+        "confidence": 0.9,
+        "needs_review": false
+      },
+      "model": "gemini/gemini-3.5-flash",
+      "error": null
+    },
+    {
+      "crop_path": "/Users/maria.papz/Desktop/fleek_buddy/Vision/pySceneDetect/frames/item_010.jpg",
+      "attributes": {
+        "category": "jacket",
+        "subcategory": "softshell",
+        "brand": "The North Face",
+        "color_primary": "blue",
+        "color_secondary": [],
+        "pattern": "solid",
+        "material_guess": "synthetic",
+        "gender_style": "unisex",
+        "visible_text": [],
+        "condition_visible": "used_good",
+        "defects_visible": [],
+        "short_title": "Blue The North Face softshell jacket",
+        "description": "A lightweight blue softshell jacket from The North Face featuring a full-zip front, zippered pockets, and a white embroidered logo on the left chest.",
+        "confidence": 0.9,
+        "needs_review": false
+      },
+      "model": "gemini/gemini-3.5-flash",
+      "error": null
+    },
+    {
+      "crop_path": "/Users/maria.papz/Desktop/fleek_buddy/Vision/pySceneDetect/frames/item_011.jpg",
+      "attributes": {
+        "category": "jacket",
+        "subcategory": "softshell",
+        "brand": "The North Face",
+        "color_primary": "black",
+        "color_secondary": [
+          "grey"
+        ],
+        "pattern": "solid",
+        "material_guess": "synthetic",
+        "gender_style": "mens",
+        "visible_text": [
+          "The North Face"
+        ],
+        "condition_visible": "used_good",
+        "defects_visible": [],
+        "short_title": "Black The North Face softshell jacket",
+        "description": "A black The North Face hooded softshell jacket featuring a full-zip front, zippered chest pocket, and side pockets. It has a grey interior lining visible at the hem.",
+        "confidence": 0.9,
+        "needs_review": false
+      },
+      "model": "gemini/gemini-3.5-flash",
+      "error": null
+    },
+    {
+      "crop_path": "/Users/maria.papz/Desktop/fleek_buddy/Vision/pySceneDetect/frames/item_012.jpg",
+      "attributes": {
+        "category": "jacket",
+        "subcategory": "vest",
+        "brand": "The North Face",
+        "color_primary": "black",
+        "color_secondary": [
+          "yellow",
+          "white"
+        ],
+        "pattern": "solid",
+        "material_guess": "synthetic",
+        "gender_style": "mens",
+        "visible_text": [
+          "ML",
+          "The North Face"
+        ],
+        "condition_visible": "used_good",
+        "defects_visible": [],
+        "short_title": "Black The North Face Softshell Vest",
+        "description": "A black sleeveless softshell vest from The North Face featuring a full-zip front, zippered hand pockets, and a yellow embroidered corporate logo on the chest.",
+        "confidence": 0.9,
+        "needs_review": false
+      },
+      "model": "gemini/gemini-3.5-flash",
+      "error": null
+    },
+    {
+      "crop_path": "/Users/maria.papz/Desktop/fleek_buddy/Vision/pySceneDetect/frames/item_013.jpg",
+      "attributes": {
+        "category": "vest",
+        "subcategory": "softshell",
+        "brand": "The North Face",
+        "color_primary": "black",
+        "color_secondary": [
+          "white"
+        ],
+        "pattern": "solid",
+        "material_guess": "synthetic",
+        "gender_style": "mens",
+        "visible_text": [
+          "iml",
+          "The North Face"
+        ],
+        "condition_visible": "used_good",
+        "defects_visible": [],
+        "short_title": "Black The North Face Softshell Vest",
+        "description": "This black The North Face zip-up vest features a mock neck, zippered hand pockets, and a white embroidered 'iml' logo on the left chest.",
+        "confidence": 0.95,
+        "needs_review": false
+      },
+      "model": "gemini/gemini-3.5-flash",
+      "error": null
+    },
+    {
+      "crop_path": "/Users/maria.papz/Desktop/fleek_buddy/Vision/pySceneDetect/frames/item_014.jpg",
+      "attributes": {
+        "category": "vest",
+        "subcategory": "softshell",
+        "brand": "The North Face",
+        "color_primary": "black",
+        "color_secondary": [],
+        "pattern": "solid",
+        "material_guess": "synthetic",
+        "gender_style": "mens",
+        "visible_text": [
+          "The North Face"
+        ],
+        "condition_visible": "used_excellent",
+        "defects_visible": [],
+        "short_title": "Black The North Face zip-up vest",
+        "description": "A black sleeveless zip-up vest featuring a high collar, zippered hand pockets, and a white embroidered logo near the bottom hem.",
+        "confidence": 0.9,
+        "needs_review": false
+      },
+      "model": "gemini/gemini-3.5-flash",
+      "error": null
+    },
+    {
+      "crop_path": "/Users/maria.papz/Desktop/fleek_buddy/Vision/pySceneDetect/frames/item_015.jpg",
+      "attributes": {
+        "category": "jacket",
+        "subcategory": "active jacket",
+        "brand": "The North Face",
+        "color_primary": "grey",
+        "color_secondary": [
+          "black"
+        ],
+        "pattern": "other",
+        "material_guess": "synthetic",
+        "gender_style": "womens",
+        "visible_text": [],
+        "condition_visible": "used_excellent",
+        "defects_visible": [],
+        "short_title": "Grey and Black The North Face Hooded Jacket",
+        "description": "This is a hooded active jacket from The North Face featuring a heathered grey body with contrasting black side panels and a full-zip front.",
+        "confidence": 0.9,
+        "needs_review": false
+      },
+      "model": "gemini/gemini-3.5-flash",
+      "error": null
+    }
+  ]
+}

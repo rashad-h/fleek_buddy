@@ -16,7 +16,14 @@ from pathlib import Path
 
 from dotenv import load_dotenv
 from litellm import completion
-from litellm.exceptions import RateLimitError
+from litellm.exceptions import (
+    APIConnectionError,
+    BadGatewayError,
+    InternalServerError,
+    RateLimitError,
+    ServiceUnavailableError,
+    Timeout,
+)
 from pydantic import ValidationError
 
 from prompts import build_messages
@@ -32,6 +39,16 @@ DEFAULT_MODELS = {
 
 # Free-tier Gemini flash is ~5 RPM → ~12s between calls.
 GEMINI_FREE_TIER_SLEEP = 13.0
+DEFAULT_RETRIES = 3
+
+RETRYABLE_EXCEPTIONS = (
+    RateLimitError,
+    ServiceUnavailableError,
+    APIConnectionError,
+    Timeout,
+    InternalServerError,
+    BadGatewayError,
+)
 
 
 def load_env() -> None:
@@ -111,7 +128,7 @@ def parse_attributes(raw: str) -> GarmentAttributes:
     return GarmentAttributes.model_validate_json(text)
 
 
-def retry_after_seconds(exc: Exception) -> float:
+def retry_after_seconds(exc: Exception, *, attempt: int = 0) -> float:
     text = str(exc)
     match = re.search(r"[Rr]etry in ([0-9]+(?:\.[0-9]+)?)s", text)
     if match:
@@ -119,7 +136,15 @@ def retry_after_seconds(exc: Exception) -> float:
     match = re.search(r'"retryDelay":\s*"([0-9]+)s"', text)
     if match:
         return float(match.group(1)) + 1.0
-    return 60.0
+
+    name = type(exc).__name__
+    if "RateLimit" in name or "429" in text or "RESOURCE_EXHAUSTED" in text:
+        return 60.0
+    if "ServiceUnavailable" in name or "503" in text or "UNAVAILABLE" in text:
+        return 20.0 + attempt * 5.0
+    if "Timeout" in name or "Connection" in name:
+        return 10.0 + attempt * 5.0
+    return 15.0 + attempt * 5.0
 
 
 def short_error(exc: Exception) -> str:
@@ -129,32 +154,52 @@ def short_error(exc: Exception) -> str:
     return f"{type(exc).__name__}: {text[:240]}"
 
 
+def failed_listing(image_path: Path, model: str, error: str) -> CropListing:
+    return CropListing(
+        crop_path=str(image_path),
+        attributes=GarmentAttributes(
+            category="unknown",
+            color_primary="unknown",
+            short_title="Needs review",
+            description="Automatic extraction failed.",
+            confidence=0.0,
+            needs_review=True,
+        ),
+        model=model,
+        error=error,
+    )
+
+
 def call_completion(
     *,
     model: str,
     messages: list[dict],
     use_schema: bool,
-    max_rate_limit_retries: int = 4,
+    max_retries: int = DEFAULT_RETRIES,
 ):
     kwargs: dict = {
         "model": model,
         "messages": messages,
         "temperature": 0.1,
-        "num_retries": 0,  # avoid burning free-tier quota on rapid retries
+        "num_retries": 0,  # we handle retries ourselves
     }
     if use_schema:
         kwargs["response_format"] = GarmentAttributes
 
     last_exc: Exception | None = None
-    for attempt in range(max_rate_limit_retries + 1):
+    for attempt in range(max_retries + 1):
         try:
             return completion(**kwargs)
-        except RateLimitError as exc:
+        except RETRYABLE_EXCEPTIONS as exc:
             last_exc = exc
-            if attempt >= max_rate_limit_retries:
+            if attempt >= max_retries:
                 raise
-            wait_s = retry_after_seconds(exc)
-            print(f"  rate-limited — waiting {wait_s:.0f}s then retrying...", flush=True)
+            wait_s = retry_after_seconds(exc, attempt=attempt)
+            print(
+                f"  {type(exc).__name__} — waiting {wait_s:.0f}s "
+                f"then retrying ({attempt + 1}/{max_retries})...",
+                flush=True,
+            )
             time.sleep(wait_s)
     assert last_exc is not None
     raise last_exc
@@ -165,10 +210,16 @@ def describe_image(
     *,
     model: str,
     category_hint: str | None = None,
+    max_retries: int = DEFAULT_RETRIES,
 ) -> CropListing:
     messages = build_messages(image_path, category_hint=category_hint)
     try:
-        response = call_completion(model=model, messages=messages, use_schema=True)
+        response = call_completion(
+            model=model,
+            messages=messages,
+            use_schema=True,
+            max_retries=max_retries,
+        )
         raw = response.choices[0].message.content or ""
         attributes = parse_attributes(raw)
         return CropListing(
@@ -188,6 +239,7 @@ def describe_image(
                     }
                 ],
                 use_schema=False,
+                max_retries=max_retries,
             )
             raw = response.choices[0].message.content or ""
             attributes = parse_attributes(raw)
@@ -197,33 +249,47 @@ def describe_image(
                 model=model,
             )
         except Exception as nested:
-            return CropListing(
-                crop_path=str(image_path),
-                attributes=GarmentAttributes(
-                    category="unknown",
-                    color_primary="unknown",
-                    short_title="Needs review",
-                    description="Automatic extraction failed.",
-                    confidence=0.0,
-                    needs_review=True,
-                ),
-                model=model,
-                error=f"{short_error(exc)} | retry: {short_error(nested)}",
+            return failed_listing(
+                image_path,
+                model,
+                f"{short_error(exc)} | retry: {short_error(nested)}",
             )
     except Exception as exc:
-        return CropListing(
-            crop_path=str(image_path),
-            attributes=GarmentAttributes(
-                category="unknown",
-                color_primary="unknown",
-                short_title="Needs review",
-                description="Automatic extraction failed.",
-                confidence=0.0,
-                needs_review=True,
-            ),
-            model=model,
-            error=short_error(exc),
+        return failed_listing(image_path, model, short_error(exc))
+
+
+def describe_image_with_retries(
+    image_path: Path,
+    *,
+    model: str,
+    category_hint: str | None = None,
+    max_retries: int = DEFAULT_RETRIES,
+) -> CropListing:
+    """Retry the whole item if it still fails after API-level retries."""
+    listing = describe_image(
+        image_path,
+        model=model,
+        category_hint=category_hint,
+        max_retries=max_retries,
+    )
+    for attempt in range(max_retries):
+        if not listing.error:
+            return listing
+        wait_s = 20.0 + attempt * 5.0
+        print(
+            f"  item failed — waiting {wait_s:.0f}s "
+            f"then retrying item ({attempt + 1}/{max_retries})...",
+            flush=True,
         )
+        time.sleep(wait_s)
+        # One API pass per item retry; call_completion already retried above.
+        listing = describe_image(
+            image_path,
+            model=model,
+            category_hint=category_hint,
+            max_retries=0,
+        )
+    return listing
 
 
 def main() -> None:
@@ -259,6 +325,12 @@ def main() -> None:
         default=None,
         help="Seconds between calls. Default: 13 for Gemini free tier, 0 otherwise.",
     )
+    parser.add_argument(
+        "--retries",
+        type=int,
+        default=DEFAULT_RETRIES,
+        help=f"Retries per failed API call / item (default: {DEFAULT_RETRIES}).",
+    )
     args = parser.parse_args()
 
     crops_dir = args.crops_dir.resolve()
@@ -268,6 +340,7 @@ def main() -> None:
     model = resolve_model(args.model)
     require_provider_key(model)
     sleep_s = default_sleep_for_model(model) if args.sleep is None else args.sleep
+    max_retries = max(0, args.retries)
     images = list_images(crops_dir)
     if args.limit is not None:
         images = images[: args.limit]
@@ -278,6 +351,7 @@ def main() -> None:
     listings: list[dict] = []
     print(f"Model: {model}")
     print(f"Images: {len(images)} from {crops_dir}")
+    print(f"Retries: {max_retries} on transient failures")
     if sleep_s > 0:
         print(f"Pacing: {sleep_s:.0f}s between calls (Gemini free tier ≈ 5 RPM)")
         eta_min = (len(images) * sleep_s) / 60.0
@@ -286,7 +360,12 @@ def main() -> None:
     for i, image_path in enumerate(images, start=1):
         hint = category_hint_from_name(image_path)
         print(f"[{i}/{len(images)}] {image_path.name} ...", flush=True)
-        listing = describe_image(image_path, model=model, category_hint=hint)
+        listing = describe_image_with_retries(
+            image_path,
+            model=model,
+            category_hint=hint,
+            max_retries=max_retries,
+        )
         listings.append(listing.model_dump())
         if listing.error:
             print(f"  ERROR: {listing.error}")
