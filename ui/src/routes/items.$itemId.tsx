@@ -6,6 +6,8 @@ import { fetchItem, fetchNegotiationForItem } from '#/lib/api.ts'
 import { getBuyerId } from '#/lib/buyer.ts'
 import { formatGBP } from '#/lib/format.ts'
 import { Button } from '#/components/ui/button.tsx'
+import { OfferModal } from '#/components/OfferModal.tsx'
+import { NegotiationDrawer } from '#/components/NegotiationDrawer.tsx'
 
 import type { Item, Negotiation } from '#/lib/types.ts'
 
@@ -14,6 +16,12 @@ export const Route = createFileRoute('/items/$itemId')({ component: ItemPage })
 function ItemPage() {
   const { itemId } = Route.useParams()
   const [buyerId, setBuyerId] = useState('')
+  const [offerOpen, setOfferOpen] = useState(false)
+  const [drawerOpen, setDrawerOpen] = useState(false)
+  const [activeNegotiationId, setActiveNegotiationId] = useState<number | null>(
+    null,
+  )
+  const [autoRespond, setAutoRespond] = useState(false)
 
   useEffect(() => {
     setBuyerId(getBuyerId())
@@ -38,6 +46,12 @@ function ItemPage() {
     )
   }
 
+  const openDrawerFor = (negotiationId: number, fresh: boolean) => {
+    setActiveNegotiationId(negotiationId)
+    setAutoRespond(fresh)
+    setDrawerOpen(true)
+  }
+
   return (
     <main className="mx-auto max-w-5xl px-6 py-8">
       <div className="grid gap-8 md:grid-cols-2">
@@ -53,8 +67,34 @@ function ItemPage() {
             </span>
           )}
         </div>
-        <ItemSummary item={item} negotiation={negotiation ?? null} />
+        <ItemSummary
+          item={item}
+          negotiation={negotiation ?? null}
+          onMakeOffer={() => setOfferOpen(true)}
+          onResume={(id) => openDrawerFor(id, false)}
+        />
       </div>
+
+      <OfferModal
+        item={item}
+        buyerId={buyerId}
+        open={offerOpen}
+        onOpenChange={setOfferOpen}
+        onCreated={(created) => openDrawerFor(created.id, true)}
+      />
+      {activeNegotiationId != null && (
+        <NegotiationDrawer
+          item={item}
+          negotiationId={activeNegotiationId}
+          autoRespond={autoRespond}
+          open={drawerOpen}
+          onOpenChange={setDrawerOpen}
+          onMakeNewOffer={() => {
+            setDrawerOpen(false)
+            setOfferOpen(true)
+          }}
+        />
+      )}
     </main>
   )
 }
@@ -62,9 +102,13 @@ function ItemPage() {
 function ItemSummary({
   item,
   negotiation,
+  onMakeOffer,
+  onResume,
 }: {
   item: Item
   negotiation: Negotiation | null
+  onMakeOffer: () => void
+  onResume: (negotiationId: number) => void
 }) {
   const chips = [
     `${item.piece_count} pieces`,
@@ -119,24 +163,30 @@ function ItemSummary({
         Ships in {item.shipping_days_min}–{item.shipping_days_max} working days
       </p>
 
-      <OfferCta item={item} negotiation={negotiation} />
+      <OfferCta
+        negotiation={negotiation}
+        onMakeOffer={onMakeOffer}
+        onResume={onResume}
+      />
     </div>
   )
 }
 
 function OfferCta({
-  item,
   negotiation,
+  onMakeOffer,
+  onResume,
 }: {
-  item: Item
   negotiation: Negotiation | null
+  onMakeOffer: () => void
+  onResume: (negotiationId: number) => void
 }) {
-  void item
   if (negotiation?.status === 'accepted') {
     return (
       <Button
         size="lg"
         className="w-full bg-accent text-accent-foreground hover:bg-accent-hover"
+        onClick={() => onResume(negotiation.id)}
       >
         Deal agreed at {formatGBP(negotiation.agreed_price ?? 0)} · View
         conversation
@@ -145,13 +195,17 @@ function OfferCta({
   }
   if (negotiation?.status === 'open') {
     return (
-      <Button size="lg" className="w-full">
+      <Button
+        size="lg"
+        className="w-full"
+        onClick={() => onResume(negotiation.id)}
+      >
         Resume negotiation
       </Button>
     )
   }
   return (
-    <Button size="lg" className="w-full">
+    <Button size="lg" className="w-full" onClick={onMakeOffer}>
       Make an offer
     </Button>
   )
