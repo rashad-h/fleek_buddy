@@ -104,9 +104,30 @@ def negotiation_state_block(ctx: NegotiationContext) -> str:
         )
     else:
         offer = "none yet"
-    return f"""\
-## Negotiation state
-Round {buyer_turns}. Buyer's standing offer: {offer}."""
+    lines = [
+        "## Negotiation state",
+        f"Round {buyer_turns}. Buyer's standing offer: {offer}.",
+    ]
+    last_counter = next(
+        (
+            m
+            for m in reversed(ctx.messages)
+            if m.role == "agent" and m.action == "counter" and m.offer_amount is not None
+        ),
+        None,
+    )
+    if last_counter is not None:
+        lines.append(
+            f"Your last counter: £{last_counter.offer_amount} for "
+            f"{pricing.describe_selection(pricing.normalize(last_counter.offer_selection))}. "
+            f"If the buyer has moved towards you since, move a little too — "
+            f"repeating the same number with the same argument reads as robotic."
+        )
+    lines.append(
+        "Reply to the buyer's latest message only: no greetings after round 1, "
+        "no re-answering earlier messages."
+    )
+    return "\n".join(lines)
 
 
 def inventory_signals_block(ctx: NegotiationContext) -> str | None:

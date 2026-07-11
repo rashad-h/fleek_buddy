@@ -24,10 +24,12 @@ from app import llm
 from app.agent import pricing
 from app.agent.context import NegotiationContext, build_chat_messages
 from app.agent.policy import (
+    GuardedDecision,
     apply_guardrails,
     fallback_reply,
     firm_price_reply,
 )
+from app.agent.prompts import VOICE_NOTE
 from app.agent.schemas import AgentDecision
 from app.models import Item, Message, Negotiation
 
@@ -51,13 +53,53 @@ def _needs_firm_reply(ctx: NegotiationContext) -> bool:
 async def decide(ctx: NegotiationContext) -> AgentDecision:
     """Produce the guarded decision for the current negotiation state."""
     if _needs_firm_reply(ctx):
-        return firm_price_reply(ctx)
+        guarded = firm_price_reply(ctx)
+    else:
+        try:
+            raw = await llm.complete_structured(build_chat_messages(ctx), AgentDecision)
+        except Exception:
+            logger.exception("agent LLM call failed; using fallback reply")
+            return fallback_reply()
+        guarded = apply_guardrails(raw, ctx)
+        logger.info(
+            "raw LLM decision: %s £%s %s | guarded: %s £%s | voice_note: %s",
+            raw.action,
+            raw.price,
+            raw.selection,
+            guarded.decision.action,
+            guarded.decision.price,
+            guarded.voice_note,
+        )
+    if guarded.voice_note is None:
+        return guarded.decision
+    return await _voice(ctx, guarded)
+
+
+async def _voice(ctx: NegotiationContext, guarded: GuardedDecision) -> AgentDecision:
+    """Have the LLM word an overridden decision in the seller's voice.
+
+    Guardrails change numbers, not words: when they rewrite a decision the
+    LLM's original message no longer matches it, so this second call asks
+    the model to announce the final decision itself. The canned message
+    already on the decision is kept if the call fails or misbehaves.
+    """
+    note = VOICE_NOTE.format(decision=guarded.voice_note)
+    messages = [*build_chat_messages(ctx), {"role": "user", "content": note}]
     try:
-        raw = await llm.complete_structured(build_chat_messages(ctx), AgentDecision)
+        text = (await llm.complete(messages)).strip()
     except Exception:
-        logger.exception("agent LLM call failed; using fallback reply")
-        return fallback_reply()
-    return apply_guardrails(raw, ctx)
+        logger.exception("voice pass failed; using canned message")
+        return guarded.decision
+    if text.startswith("{"):
+        # A model stuck in output-format mode; salvage the message field.
+        try:
+            text = str(json.loads(text).get("message", ""))
+        except ValueError:
+            text = ""
+    text = text.strip().strip('"')
+    if not text:
+        return guarded.decision
+    return guarded.decision.model_copy(update={"message": text})
 
 
 async def _persist(
