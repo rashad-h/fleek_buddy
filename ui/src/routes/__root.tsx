@@ -4,10 +4,6 @@ import {
   Scripts,
   createRootRouteWithContext,
 } from '@tanstack/react-router'
-import { TanStackRouterDevtoolsPanel } from '@tanstack/react-router-devtools'
-import { TanStackDevtools } from '@tanstack/react-devtools'
-
-import TanStackQueryDevtools from '../integrations/tanstack-query/devtools'
 
 import appCss from '../styles.css?url'
 
@@ -28,7 +24,7 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         content: 'width=device-width, initial-scale=1',
       },
       {
-        title: 'TanStack Start Template',
+        title: 'Fleek Buddy — Wholesale Bundles',
       },
     ],
     links: [
@@ -48,24 +44,18 @@ function RootDocument({ children }: { children: React.ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <nav className="flex h-16 items-center gap-6 border-b px-6">
-          <Link to="/" className="font-bold">
-            Fleek Buddy
-          </Link>
-        </nav>
+        <header className="sticky top-0 z-40 border-b bg-background">
+          <nav className="mx-auto flex h-14 max-w-6xl items-center px-6">
+            <Link
+              to="/"
+              className="text-lg font-extrabold tracking-tight text-foreground"
+            >
+              FLEEK BUDDY
+              <span className="text-accent">.</span>
+            </Link>
+          </nav>
+        </header>
         {children}
-        <TanStackDevtools
-          config={{
-            position: 'bottom-right',
-          }}
-          plugins={[
-            {
-              name: 'Tanstack Router',
-              render: <TanStackRouterDevtoolsPanel />,
-            },
-            TanStackQueryDevtools,
-          ]}
-        />
         <Scripts />
       </body>
     </html>
