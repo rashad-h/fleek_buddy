@@ -32,6 +32,21 @@ export const Route = createRootRouteWithContext<MyRouterContext>()({
         rel: 'stylesheet',
         href: appCss,
       },
+      {
+        rel: 'icon',
+        href: '/favicon.ico',
+        sizes: '48x48',
+      },
+      {
+        rel: 'icon',
+        type: 'image/png',
+        href: '/logo192.png',
+        sizes: '192x192',
+      },
+      {
+        rel: 'apple-touch-icon',
+        href: '/logo192.png',
+      },
     ],
   }),
   shellComponent: RootDocument,
@@ -48,8 +63,13 @@ function RootDocument({ children }: { children: React.ReactNode }) {
           <nav className="mx-auto flex h-14 max-w-6xl items-center px-6">
             <Link
               to="/"
-              className="text-lg font-extrabold tracking-tight text-foreground"
+              className="flex items-center gap-2.5 text-lg font-extrabold tracking-tight text-foreground"
             >
+              <img
+                src="/logo192.png"
+                alt="Fleek Buddy logo"
+                className="h-9 w-9 rounded-lg"
+              />
               FLEEK BUDDY
               <span className="text-accent">.</span>
             </Link>
