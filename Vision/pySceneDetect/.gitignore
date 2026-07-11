@@ -6,10 +6,13 @@ __pycache__/
 
 # Extracted / probe outputs (never commit images)
 frames/
+frames_*/
 _probe/
 _holds/
 _v2/
 _cands/
+_dup*/
+_dup_debug/
 *.jpg
 *.jpeg
 *.png
