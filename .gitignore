@@ -15,3 +15,6 @@ Vision/sam3/outputs/*
 Vision/sam3/data/*
 !Vision/sam3/data/.gitkeep
 .DS_Store
+
+# Misc
+specs/
