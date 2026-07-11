@@ -1,28 +1,36 @@
-.PHONY: dev down migrate makemigration seed lint format logs build
+.PHONY: dev down nuke migrate makemigration seed lint format logs logs-ui build
 
-dev: ## Start API + Postgres with reload (docker compose up)
-	docker compose up
+dev: ## Start UI + API + Postgres (one command; migrations auto-apply)
+	docker compose up --build
 
 down: ## Stop and remove containers
 	docker compose down
 
+nuke: ## Stop everything and wipe the database volume (fresh start)
+	docker compose down -v
+
 migrate: ## Apply migrations (alembic upgrade head)
-	docker compose exec app alembic upgrade head
+	docker compose exec backend alembic upgrade head
 
 makemigration: ## Autogenerate a migration: make makemigration m="message"
-	docker compose exec app alembic revision --autogenerate -m "$(m)"
+	docker compose exec backend alembic revision --autogenerate -m "$(m)"
 
-seed: ## Load demo data into the database
-	docker compose exec app python seed.py
+seed: ## Load the demo catalogue into the database
+	docker compose exec backend python seed.py
 
-lint: ## Run Ruff lint
-	docker compose exec app ruff check .
+lint: ## Lint backend (ruff) and ui (eslint)
+	docker compose exec backend ruff check .
+	docker compose exec ui pnpm lint
 
-format: ## Format with Ruff
-	docker compose exec app ruff format .
+format: ## Format backend (ruff) and ui (prettier)
+	docker compose exec backend ruff format .
+	docker compose exec ui pnpm format
 
 logs: ## Tail the API logs
-	docker compose logs -f app
+	docker compose logs -f backend
 
-build: ## Build the production image
+logs-ui: ## Tail the UI logs
+	docker compose logs -f ui
+
+build: ## Build all images
 	docker compose build

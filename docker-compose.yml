@@ -1,7 +1,7 @@
 services:
-  app:
+  backend:
     build:
-      context: .
+      context: backend
       target: dev
     ports:
       - '8000:8000'
@@ -10,10 +10,25 @@ services:
       # Point the app at the Postgres service (async driver), overriding the default.
       DATABASE_URL: postgresql+asyncpg://postgres:postgres@db:5432/app
     volumes:
-      - .:/app
+      - ./backend:/app
     depends_on:
       db:
         condition: service_healthy
+
+  ui:
+    build:
+      context: ui
+      target: dev
+    ports:
+      - '3000:3000'
+    environment:
+      # Vite dev-server proxies /api to this address (see ui/vite.config.ts).
+      BACKEND_URL: http://backend:8000
+    volumes:
+      - ./ui:/app
+      - /app/node_modules
+    depends_on:
+      - backend
 
   db:
     image: postgres:17-alpine
