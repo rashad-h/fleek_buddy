@@ -17,7 +17,7 @@ class OfferSelection(BaseModel):
 
 class ItemRead(BaseModel):
     """Public view of an item. Seller secrets (buying price, floor prices,
-    the per-grade stock breakdown) are deliberately absent."""
+    the per-grade stock breakdown, vision signals) are deliberately absent."""
 
     model_config = ConfigDict(from_attributes=True)
 

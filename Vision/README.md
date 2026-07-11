@@ -53,7 +53,10 @@ Video + text prompts
 
 Code:
 - Isolation spine: [`Vision/sam3/`](sam3/)
-- Frames → metadata: [`Vision/vlm/`](vlm/)
+- Frames → metadata: [`Vision/vlm/`](vlm/) (per-video **jobs**, not one static folder)
+
+Scale: put each upload under `Vision/runs/<video_id>/frames/`, then
+`python describe_crops.py --jobs-root Vision/runs --resume`.
 
 ## MVP
 

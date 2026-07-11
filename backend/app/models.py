@@ -29,6 +29,21 @@ class SelectionEntry(TypedDict):
     quantity: int
 
 
+class VisionSignals(TypedDict):
+    """Seller-confidential photo signals for the negotiator.
+
+    Aggregated from per-garment VLM listings at publish. Never expose via
+    the public Item API.
+    """
+
+    suggested_stance: str
+    defect_severity: str
+    defects_visible: list[str]
+    talking_points: list[str]
+    buyer_objection_risks: list[str]
+    needs_review: bool
+
+
 class Base(DeclarativeBase):
     pass
 
@@ -36,9 +51,10 @@ class Base(DeclarativeBase):
 class Item(Base):
     """A wholesale clothing bundle listed on the marketplace.
 
-    `buying_price`, `lowest_bundle_price`, `lowest_price_per_piece` and
-    `grades` are the seller's confidential haggle metadata: they drive the
-    negotiation agent and must never be exposed through the public API.
+    `buying_price`, `lowest_bundle_price`, `lowest_price_per_piece`,
+    `grades`, and `vision_signals` are the seller's confidential haggle
+    metadata: they drive the negotiation agent and must never be exposed
+    through the public API.
     """
 
     __tablename__ = "items"
@@ -68,6 +84,7 @@ class Item(Base):
     lowest_bundle_price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     lowest_price_per_piece: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     grades: Mapped[list[GradeInfo]] = mapped_column(JSONB, default=list)
+    vision_signals: Mapped[VisionSignals | None] = mapped_column(JSONB, default=None)
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 

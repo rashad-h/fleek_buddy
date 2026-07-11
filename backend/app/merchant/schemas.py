@@ -28,6 +28,11 @@ class GarmentAttributesRead(BaseModel):
     description: str
     confidence: float = Field(ge=0.0, le=1.0)
     needs_review: bool
+    # Lean seller-side signals (kept for publish → agent; optional in older jobs).
+    defects_visible: list[str] = Field(default_factory=list)
+    defect_severity: str = "unknown"
+    talking_points: list[str] = Field(default_factory=list)
+    buyer_objection_risks: list[str] = Field(default_factory=list)
 
 
 class MerchantItemRead(BaseModel):
@@ -36,6 +41,7 @@ class MerchantItemRead(BaseModel):
     image_url: str
     status: ItemStatus
     attributes: GarmentAttributesRead | None = None
+    suggested_stance: Literal["firm", "balanced", "flexible"] | None = None
     error: str | None = None
 
 

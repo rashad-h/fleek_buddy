@@ -145,6 +145,7 @@ class JobStore:
         index: int,
         status: str,
         attributes: GarmentAttributesRead | None = None,
+        suggested_stance: str | None = None,
         error: str | None = None,
     ) -> MerchantItemRead:
         item = job.items[index]
@@ -154,6 +155,7 @@ class JobStore:
             image_url=item.image_url,
             status=status,  # type: ignore[arg-type]
             attributes=attributes,
+            suggested_stance=suggested_stance,  # type: ignore[arg-type]
             error=error,
         )
         job.items[index] = updated

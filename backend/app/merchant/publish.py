@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.merchant.jobs import JobState
 from app.merchant.paths import repo_root
 from app.merchant.schemas import BundleSummary
+from app.merchant.vision_signals import aggregate_vision_signals
 from app.models import GradeInfo, Item
 
 TWO_PLACES = Decimal("0.01")
@@ -156,6 +157,7 @@ async def publish_job_to_catalogue(
         lowest_bundle_price=floor,
         lowest_price_per_piece=FLOOR_PER_PIECE,
         grades=_grades(piece_count),
+        vision_signals=aggregate_vision_signals(job.listings_path),
     )
     session.add(item)
     await session.commit()

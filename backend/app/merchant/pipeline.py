@@ -55,6 +55,13 @@ def _run_extract(job: JobState, *, expected_count: int) -> list[str]:
     return filenames
 
 
+def _str_list(value: object, *, limit: int | None = None) -> list[str]:
+    if not isinstance(value, list):
+        return []
+    out = [str(x).strip() for x in value if str(x).strip()]
+    return out[:limit] if limit is not None else out
+
+
 def _attributes_from_listing(row: dict) -> GarmentAttributesRead:
     attrs = row.get("attributes") or {}
     return GarmentAttributesRead(
@@ -68,7 +75,18 @@ def _attributes_from_listing(row: dict) -> GarmentAttributesRead:
         description=attrs.get("description") or "",
         confidence=float(attrs.get("confidence") or 0.0),
         needs_review=bool(attrs.get("needs_review", True)),
+        defects_visible=_str_list(attrs.get("defects_visible")),
+        defect_severity=str(attrs.get("defect_severity") or "unknown"),
+        talking_points=_str_list(attrs.get("talking_points"), limit=3),
+        buyer_objection_risks=_str_list(attrs.get("buyer_objection_risks"), limit=3),
     )
+
+
+def _stance_from_listing(row: dict) -> str | None:
+    stance = row.get("suggested_stance")
+    if stance in {"firm", "balanced", "flexible"}:
+        return stance
+    return None
 
 
 def _listing_rows(path: Path) -> list[dict]:
@@ -129,6 +147,7 @@ async def _poll_listings_while_describing(
                     index=index,
                     status="complete",
                     attributes=_attributes_from_listing(row),
+                    suggested_stance=_stance_from_listing(row),
                 )
             await job.publish(
                 "item_analyzed",
@@ -138,6 +157,7 @@ async def _poll_listings_while_describing(
                     "attributes": (
                         updated.attributes.model_dump() if updated.attributes else None
                     ),
+                    "suggested_stance": updated.suggested_stance,
                     "error": updated.error,
                 },
             )

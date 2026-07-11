@@ -140,17 +140,33 @@ def negotiation_state_block(ctx: NegotiationContext) -> str:
     return "\n".join(lines)
 
 
-def inventory_signals_block(ctx: NegotiationContext) -> str | None:
-    """Placeholder for richer signals (stock feeds, demand data, seasonality)."""
-    return None
+def vision_signals_block(ctx: NegotiationContext) -> str | None:
+    """Seller-side photo signals from publish. Additive; never overrides floors."""
+    signals = ctx.item.vision_signals
+    if not signals:
+        return None
+    defects = signals.get("defects_visible") or []
+    severity = signals.get("defect_severity") or "unknown"
+    if defects:
+        defect_line = f"{', '.join(defects)} ({severity})"
+    else:
+        defect_line = f"none ({severity})"
+    return (
+        "## Vision signals (seller-side — additive, does not override listing or floors)\n"
+        f"stance: {signals.get('suggested_stance') or 'balanced'}\n"
+        f"defects: {defect_line}\n"
+        f"talking_points: {signals.get('talking_points') or []}\n"
+        f"buyer_objection_risks: {signals.get('buyer_objection_risks') or []}\n"
+        f"needs_review: {bool(signals.get('needs_review'))}"
+    )
 
 
 CONTEXT_PROVIDERS: list[ContextProvider] = [
     item_listing_block,
+    vision_signals_block,
     grade_stock_block,
     haggle_policy_block,
     negotiation_state_block,
-    inventory_signals_block,
 ]
 
 
