@@ -11,7 +11,9 @@ import argparse
 import json
 import os
 import re
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 from dotenv import load_dotenv
@@ -40,6 +42,7 @@ DEFAULT_MODELS = {
 # Free-tier Gemini flash is ~5 RPM → ~12s between calls.
 GEMINI_FREE_TIER_SLEEP = 13.0
 DEFAULT_RETRIES = 3
+DEFAULT_WORKERS = 1
 
 RETRYABLE_EXCEPTIONS = (
     RateLimitError,
@@ -53,7 +56,9 @@ RETRYABLE_EXCEPTIONS = (
 
 def load_env() -> None:
     here = Path(__file__).resolve().parent
+    # Prefer real .env; fall back to .env.example for local one-off keys.
     load_dotenv(here / ".env")
+    load_dotenv(here / ".env.example", override=False)
     load_dotenv(here.parent.parent / ".env", override=False)
 
 
@@ -281,7 +286,7 @@ def describe_image_with_retries(
             return listing
         wait_s = 20.0 + attempt * 5.0
         print(
-            f"  item failed — waiting {wait_s:.0f}s "
+            f"  [{image_path.name}] item failed — waiting {wait_s:.0f}s "
             f"then retrying item ({attempt + 1}/{max_retries})...",
             flush=True,
         )
@@ -294,6 +299,42 @@ def describe_image_with_retries(
             max_retries=0,
         )
     return listing
+
+
+def _write_payload(
+    out_path: Path,
+    *,
+    model: str,
+    crops_dir: Path,
+    listings: list[dict],
+) -> None:
+    payload = {
+        "model": model,
+        "crops_dir": str(crops_dir),
+        "count": len(listings),
+        "needs_review": sum(
+            1
+            for row in listings
+            if row["attributes"]["needs_review"] or row.get("error")
+        ),
+        "listings": listings,
+    }
+    out_path.parent.mkdir(parents=True, exist_ok=True)
+    out_path.write_text(json.dumps(payload, indent=2))
+
+
+def _log_listing(index: int, total: int, image_path: Path, listing: CropListing) -> None:
+    prefix = f"[{index}/{total}] {image_path.name}"
+    if listing.error:
+        print(f"{prefix} ERROR: {listing.error}", flush=True)
+        return
+    attrs = listing.attributes
+    print(
+        f"{prefix} {attrs.short_title} | {attrs.color_primary} | "
+        f"stance={listing.suggested_stance} | "
+        f"conf={attrs.confidence:.2f} review={attrs.needs_review}",
+        flush=True,
+    )
 
 
 def main() -> None:
@@ -327,13 +368,19 @@ def main() -> None:
         "--sleep",
         type=float,
         default=None,
-        help="Seconds between calls. Default: 13 for Gemini free tier, 0 otherwise.",
+        help="Seconds between calls (serial mode). Default: 13 for Gemini, 0 with --workers > 1.",
     )
     parser.add_argument(
         "--retries",
         type=int,
         default=DEFAULT_RETRIES,
         help=f"Retries per failed API call / item (default: {DEFAULT_RETRIES}).",
+    )
+    parser.add_argument(
+        "--workers",
+        type=int,
+        default=DEFAULT_WORKERS,
+        help="Parallel workers (default: 1). Use >1 with a premium API tier; implies --sleep 0.",
     )
     args = parser.parse_args()
 
@@ -343,7 +390,14 @@ def main() -> None:
 
     model = resolve_model(args.model)
     require_provider_key(model)
-    sleep_s = default_sleep_for_model(model) if args.sleep is None else args.sleep
+    workers = max(1, args.workers)
+    if args.sleep is None:
+        sleep_s = 0.0 if workers > 1 else default_sleep_for_model(model)
+    else:
+        sleep_s = args.sleep
+    if workers > 1 and sleep_s > 0:
+        print("Note: --sleep is ignored when --workers > 1", flush=True)
+        sleep_s = 0.0
     max_retries = max(0, args.retries)
     images = list_images(crops_dir)
     if args.limit is not None:
@@ -352,52 +406,65 @@ def main() -> None:
     out_path = args.out or (crops_dir.parent / "listings.json")
     out_path = out_path.resolve()
 
-    listings: list[dict] = []
     print(f"Model: {model}")
     print(f"Images: {len(images)} from {crops_dir}")
+    print(f"Workers: {workers}")
     print(f"Retries: {max_retries} on transient failures")
-    if sleep_s > 0:
+    if workers == 1 and sleep_s > 0:
         print(f"Pacing: {sleep_s:.0f}s between calls (Gemini free tier ≈ 5 RPM)")
         eta_min = (len(images) * sleep_s) / 60.0
         print(f"ETA ≈ {eta_min:.1f} min")
 
-    for i, image_path in enumerate(images, start=1):
+    total = len(images)
+    results: list[dict | None] = [None] * total
+    write_lock = threading.Lock()
+
+    def process_one(index: int, image_path: Path) -> tuple[int, CropListing]:
         hint = category_hint_from_name(image_path)
-        print(f"[{i}/{len(images)}] {image_path.name} ...", flush=True)
+        print(f"[{index + 1}/{total}] {image_path.name} ...", flush=True)
         listing = describe_image_with_retries(
             image_path,
             model=model,
             category_hint=hint,
             max_retries=max_retries,
         )
-        listings.append(listing.model_dump())
-        if listing.error:
-            print(f"  ERROR: {listing.error}")
-        else:
-            attrs = listing.attributes
-            print(
-                f"  {attrs.short_title} | {attrs.color_primary} | "
-                f"stance={listing.suggested_stance} | "
-                f"conf={attrs.confidence:.2f} review={attrs.needs_review}"
+        return index, listing
+
+    def store_result(index: int, image_path: Path, listing: CropListing) -> None:
+        results[index] = listing.model_dump()
+        _log_listing(index + 1, total, image_path, listing)
+        with write_lock:
+            # Keep original image order among completed rows.
+            ordered = [results[i] for i in range(total) if results[i] is not None]
+            _write_payload(
+                out_path,
+                model=model,
+                crops_dir=crops_dir,
+                listings=ordered,
             )
-        # Save progress after each image so a mid-run fail still keeps results.
-        payload = {
-            "model": model,
-            "crops_dir": str(crops_dir),
-            "count": len(listings),
-            "needs_review": sum(
-                1
-                for row in listings
-                if row["attributes"]["needs_review"] or row.get("error")
-            ),
-            "listings": listings,
-        }
-        out_path.parent.mkdir(parents=True, exist_ok=True)
-        out_path.write_text(json.dumps(payload, indent=2))
 
-        if sleep_s > 0 and i < len(images):
-            time.sleep(sleep_s)
+    if workers == 1:
+        for i, image_path in enumerate(images):
+            index, listing = process_one(i, image_path)
+            store_result(index, image_path, listing)
+            if sleep_s > 0 and i + 1 < total:
+                time.sleep(sleep_s)
+    else:
+        with ThreadPoolExecutor(max_workers=workers) as pool:
+            futures = {
+                pool.submit(process_one, i, path): (i, path)
+                for i, path in enumerate(images)
+            }
+            for future in as_completed(futures):
+                index, image_path = futures[future]
+                try:
+                    index, listing = future.result()
+                except Exception as exc:
+                    listing = _failed_listing(image_path, model=model, error=short_error(exc))
+                store_result(index, image_path, listing)
 
+    listings = [row for row in results if row is not None]
+    _write_payload(out_path, model=model, crops_dir=crops_dir, listings=listings)
     print(f"Wrote {out_path}")
 
 
