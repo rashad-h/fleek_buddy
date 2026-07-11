@@ -3,44 +3,38 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db import get_session
-from app.models import Item
-from app.schemas import ItemCreate, ItemRead, ItemUpdate
+from app.models import Item, Negotiation
+from app.schemas import ItemRead, NegotiationRead
 
 router = APIRouter(prefix="/items", tags=["items"])
 
 
 @router.get("", response_model=list[ItemRead])
-async def list_items(session: AsyncSession = Depends(get_session)):
-    result = await session.execute(select(Item).order_by(Item.created_at.desc()))
-    return result.scalars().all()
+async def list_items(session: AsyncSession = Depends(get_session)) -> list[Item]:
+    result = await session.execute(select(Item).order_by(Item.id))
+    return list(result.scalars().all())
 
 
-@router.post("", response_model=ItemRead, status_code=201)
-async def create_item(data: ItemCreate, session: AsyncSession = Depends(get_session)):
-    item = Item(**data.model_dump())
-    session.add(item)
-    await session.commit()
-    await session.refresh(item)
-    return item
-
-
-@router.patch("/{item_id}", response_model=ItemRead)
-async def update_item(
-    item_id: int, data: ItemUpdate, session: AsyncSession = Depends(get_session)
-):
+@router.get("/{item_id}", response_model=ItemRead)
+async def get_item(item_id: int, session: AsyncSession = Depends(get_session)) -> Item:
     item = await session.get(Item, item_id)
     if item is None:
         raise HTTPException(status_code=404, detail="Item not found")
-    item.completed = data.completed
-    await session.commit()
-    await session.refresh(item)
     return item
 
 
-@router.delete("/{item_id}", status_code=204)
-async def delete_item(item_id: int, session: AsyncSession = Depends(get_session)):
-    item = await session.get(Item, item_id)
-    if item is None:
-        raise HTTPException(status_code=404, detail="Item not found")
-    await session.delete(item)
-    await session.commit()
+@router.get("/{item_id}/negotiation", response_model=NegotiationRead)
+async def get_negotiation_for_item(
+    item_id: int, buyer_id: str, session: AsyncSession = Depends(get_session)
+) -> Negotiation:
+    """Latest negotiation between this buyer and item; 404 when none exists."""
+    result = await session.execute(
+        select(Negotiation)
+        .where(Negotiation.item_id == item_id, Negotiation.buyer_id == buyer_id)
+        .order_by(Negotiation.id.desc())
+        .limit(1)
+    )
+    negotiation = result.scalar_one_or_none()
+    if negotiation is None:
+        raise HTTPException(status_code=404, detail="No negotiation for this buyer")
+    return negotiation

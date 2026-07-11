@@ -1,7 +1,7 @@
 [project]
-name = "fastapi-template"
+name = "fleek-buddy-backend"
 version = "0.1.0"
-description = "Hackathon-ready FastAPI backend with async SQLAlchemy and a provider-agnostic LLM."
+description = "Fleek Buddy negotiation backend: FastAPI, async SQLAlchemy and an LLM seller agent."
 requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.115",
@@ -12,7 +12,6 @@ dependencies = [
     "pydantic>=2.9",
     "pydantic-settings>=2.6",
     "litellm>=1.55",
-    "faker>=30",
 ]
 
 [project.optional-dependencies]
@@ -31,3 +30,5 @@ line-length = 100
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "UP", "B"]
+# B008: `Depends(...)` in defaults is the standard FastAPI injection idiom.
+ignore = ["B008"]

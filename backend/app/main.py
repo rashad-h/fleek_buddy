@@ -2,9 +2,9 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import settings
-from app.routers import chat, items
+from app.routers import items, negotiations
 
-app = FastAPI(title="FastAPI Template")
+app = FastAPI(title="Fleek Buddy API")
 
 app.add_middleware(
     CORSMiddleware,
@@ -13,8 +13,8 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(items.router)
-app.include_router(chat.router)
+app.include_router(items.router, prefix="/api")
+app.include_router(negotiations.router, prefix="/api")
 
 
 @app.get("/health")
