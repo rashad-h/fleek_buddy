@@ -15,7 +15,9 @@ The floor is applied with a small flex (`pricing.FLOOR_FLEX`): closing a
 touch below the floor to hit a cleaner number is allowed, by design.
 """
 
+import logging
 import random
+import re
 from dataclasses import dataclass
 from decimal import Decimal
 
@@ -23,6 +25,8 @@ from app.agent import pricing
 from app.agent.context import NegotiationContext
 from app.agent.schemas import AgentDecision
 from app.models import SelectionEntry
+
+logger = logging.getLogger(__name__)
 
 TWO_PLACES = Decimal("0.01")
 
@@ -54,6 +58,12 @@ FIRM_PRICE = (
 FALLBACK = (
     "Sorry, I lost my train of thought there. Could you repeat your offer?",
     "Hang on, dropped my thread for a second — what were you offering again?",
+)
+CLARIFY_OFFER = (
+    "Quick check — your offer box says £{box} but your message says £{text}. "
+    "Which one are we talking?",
+    "Hold on, I'm seeing two numbers: £{box} in the offer and £{text} in "
+    "your message. Which is it?",
 )
 
 
@@ -103,6 +113,117 @@ def _cap_selection(
     return capped or None
 
 
+# Plain amounts and thousands-separated ones ("1,200"), up to 2 decimals.
+_AMOUNT = r"\d{1,3}(?:,\d{3})+(?:\.\d{1,2})?|\d+(?:\.\d{1,2})?"
+_NUMBER = re.compile(_AMOUNT)
+# Currency-marked amounts ("£95", "95 quid") that aren't per-piece rates.
+_CURRENCY = re.compile(
+    rf"(?:£\s*({_AMOUNT})|({_AMOUNT})\s*(?:quid|pounds?|gbp))"
+    rf"(?!\s*(?:each|/|per\b|a piece))",
+    re.IGNORECASE,
+)
+
+
+def _mentions_amount(text: str, amount: Decimal) -> bool:
+    return any(Decimal(t.replace(",", "")) == amount for t in _NUMBER.findall(text))
+
+
+def _currency_amounts(text: str) -> set[Decimal]:
+    return {_to_money((a or b).replace(",", "")) for a, b in _CURRENCY.findall(text)}
+
+
+def _text_offer(decision: AgentDecision, ctx: NegotiationContext, content: str) -> Decimal | None:
+    """The price the buyer named in `content`, or None.
+
+    Prefers the LLM's extraction (handles bare numbers like "fine, 95
+    then") but only when the amount appears verbatim in the text. Falls
+    back to deterministic parsing of currency-marked amounts, adopted only
+    when exactly one remains after dropping numbers already on the table
+    (the seller's own quotes and the standing offer), so a price the buyer
+    merely quoted back never counts as an offer.
+    """
+    if decision.buyer_price is not None:
+        price = _to_money(decision.buyer_price)
+        if _mentions_amount(content, price):
+            return price
+    known: set[Decimal] = {_to_money(ctx.item.bundle_price), _to_money(ctx.item.price_per_piece)}
+    for g in ctx.item.grades or []:
+        known.add(_to_money(g["price_per_piece"]))
+    if ctx.negotiation.current_offer is not None:
+        known.add(_to_money(ctx.negotiation.current_offer))
+    prev = previous_counter(ctx)
+    if prev is not None:
+        known.add(_to_money(prev[0]))
+    candidates = _currency_amounts(content) - known
+    logger.info(
+        "text offer extraction: content=%r buyer_price=%s known=%s candidates=%s",
+        content,
+        decision.buyer_price,
+        sorted(known),
+        sorted(candidates),
+    )
+    if len(candidates) == 1:
+        return candidates.pop()
+    return None
+
+
+def reconcile_text_offer(
+    decision: AgentDecision, ctx: NegotiationContext
+) -> GuardedDecision | None:
+    """Reconcile a price the buyer typed in chat with the offer-box state.
+
+    Buyers often write their number in the message instead of the offer box,
+    leaving `negotiation.current_offer` stale. `_text_offer` recovers that
+    price from the message text.
+
+    Two outcomes: when the latest message carries no box offer, the text
+    price silently becomes the standing offer (returns None, negotiation
+    proceeds). When the same message has a box offer AND a different price
+    in its text, the numbers are ambiguous and the returned decision asks
+    the buyer which one they mean instead of guessing.
+    """
+    last = next((m for m in reversed(ctx.messages) if m.role == "buyer"), None)
+    if last is None:
+        return None
+    prev = previous_counter(ctx)
+    if (
+        decision.action == "accept"
+        and last.offer_amount is None
+        and prev is not None
+        and _mentions_amount(last.content, prev[0])
+    ):
+        # "fine, £95 then" quoting the seller's own counter is the buyer
+        # agreeing to it; that counter becomes their standing offer.
+        if ctx.negotiation.current_offer != prev[0]:
+            ctx.negotiation.current_offer = prev[0]
+            ctx.negotiation.current_selection = prev[1]
+            last.offer_amount = prev[0]
+            last.offer_selection = prev[1]
+            last.action = "offer"
+        return None
+    price = _text_offer(decision, ctx, last.content)
+    if price is None:
+        return None
+    if last.offer_amount is not None:
+        if price == last.offer_amount:
+            return None
+        # No voice pass here: the exact two numbers must survive into the
+        # question, and the canned variants are already conversational.
+        return GuardedDecision(
+            decision=AgentDecision(
+                action="chat",
+                price=None,
+                message=_pick(CLARIFY_OFFER, box=last.offer_amount, text=price),
+            ),
+        )
+    if price != ctx.negotiation.current_offer:
+        ctx.negotiation.current_offer = price
+        last.offer_amount = price
+        last.offer_selection = ctx.negotiation.current_selection
+        last.action = "offer"
+    return None
+
+
 def firm_price_reply(ctx: NegotiationContext) -> GuardedDecision:
     """Hold-firm response for non-negotiable listings offered below the price."""
     item = ctx.item
@@ -139,6 +260,8 @@ def apply_guardrails(decision: AgentDecision, ctx: NegotiationContext) -> Guarde
     - counter selections are capped to real stock; counter prices are
       clamped to [flexed floor, asking] for that scope and never rise above
       the agent's previous counter on the same scope
+    - a counter that would repeat the previous one mid-haggle concedes a
+      third of the gap to the buyer instead
     - a counter is converted to an accept when the buyer's valid standing
       offer already meets the clamped price on the same scope
 
@@ -191,6 +314,18 @@ def apply_guardrails(decision: AgentDecision, ctx: NegotiationContext) -> Guarde
 
         proposed_price = _to_money(decision.price) if decision.price is not None else None
         price = max(hard_floor, min(proposed_price or ceiling, ceiling))
+        if (
+            prev is not None
+            and scope == prev[1]
+            and price >= prev[0]
+            and offer is not None
+            and offer < prev[0]
+        ):
+            # Never repeat a counter mid-haggle: concede a third of the gap
+            # to the buyer instead of restating the same number. The result
+            # stays within [hard_floor, previous counter].
+            target = max(offer, hard_floor)
+            price = max(hard_floor, min(prev[0], _to_money(prev[0] - (prev[0] - target) / 3)))
         if offer is not None and scope == buyer_scope and offer >= hard_floor and offer >= price:
             return GuardedDecision(
                 decision=AgentDecision(
