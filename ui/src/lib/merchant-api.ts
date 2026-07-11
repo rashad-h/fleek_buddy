@@ -19,11 +19,13 @@ export function merchantImageUrl(path: string): string {
 
 export async function createMerchantJob(
   video: File,
-  expectedCount: number,
+  expectedCount?: number,
 ): Promise<MerchantJobCreateResponse> {
   const form = new FormData()
   form.append('video', video)
-  form.append('expected_count', String(expectedCount))
+  if (expectedCount != null) {
+    form.append('expected_count', String(expectedCount))
+  }
   const res = await fetch(`${API_BASE}/merchant/jobs`, {
     method: 'POST',
     body: form,
@@ -36,10 +38,12 @@ export async function createMerchantJob(
 }
 
 export async function createSampleMerchantJob(
-  expectedCount: number,
+  expectedCount?: number,
 ): Promise<MerchantJobCreateResponse> {
   const form = new FormData()
-  form.append('expected_count', String(expectedCount))
+  if (expectedCount != null) {
+    form.append('expected_count', String(expectedCount))
+  }
   const res = await fetch(`${API_BASE}/merchant/jobs/sample`, {
     method: 'POST',
     body: form,

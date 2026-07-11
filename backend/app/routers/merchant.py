@@ -13,7 +13,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.db import get_session
 from app.merchant.jobs import JobState, job_store
 from app.merchant.pipeline import (
-    DEFAULT_EXPECTED_COUNT,
     DEFAULT_SAMPLE,
     SAMPLE_VIDEOS,
     copy_sample_video,
@@ -33,9 +32,10 @@ SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 ALLOWED_VIDEO_SUFFIXES = {".mp4", ".m4v", ".mov", ".webm", ".mkv"}
 
 
-def _clamp_expected_count(raw: int | None) -> int:
+def _clamp_expected_count(raw: int | None) -> int | None:
+    """None means unconstrained extraction (no -N)."""
     if raw is None:
-        return DEFAULT_EXPECTED_COUNT
+        return None
     return max(1, min(int(raw), 40))
 
 
@@ -60,7 +60,7 @@ def _start_pipeline(
     job: JobState,
     background: BackgroundTasks,
     *,
-    expected_count: int,
+    expected_count: int | None,
 ) -> MerchantJobCreateResponse:
     background.add_task(run_job, job, expected_count=expected_count)
     return MerchantJobCreateResponse(job_id=job.job_id)
@@ -70,7 +70,7 @@ def _start_pipeline(
 async def create_job(
     background: BackgroundTasks,
     video: UploadFile = File(...),
-    expected_count: int = Form(DEFAULT_EXPECTED_COUNT),
+    expected_count: int | None = Form(None),
 ) -> MerchantJobCreateResponse:
     """Upload a supplier video and start live frame extraction + Gemini analysis."""
     job = job_store.create()
@@ -85,7 +85,7 @@ async def create_job(
 @router.post("/jobs/sample", response_model=MerchantJobCreateResponse, status_code=201)
 async def create_sample_job(
     background: BackgroundTasks,
-    expected_count: int = Form(DEFAULT_EXPECTED_COUNT),
+    expected_count: int | None = Form(None),
 ) -> MerchantJobCreateResponse:
     """Start processing with a bundled demo video (no upload required)."""
     job = job_store.create()

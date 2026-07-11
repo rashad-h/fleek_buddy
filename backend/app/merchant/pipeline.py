@@ -14,7 +14,6 @@ from app.merchant.paths import pyscene_dir, python_for, sample_video_dir, vlm_di
 from app.merchant.schemas import GarmentAttributesRead
 from app.merchant.summarize import summarize_listings
 
-DEFAULT_EXPECTED_COUNT = 12
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 
 
@@ -26,7 +25,7 @@ def _list_frame_files(frames_dir: Path) -> list[str]:
     )
 
 
-def _run_extract(job: JobState, *, expected_count: int) -> list[str]:
+def _run_extract(job: JobState, *, expected_count: int | None) -> list[str]:
     extract_script = pyscene_dir() / "extract.py"
     if not extract_script.is_file():
         raise RuntimeError(f"Missing extractor: {extract_script}")
@@ -41,9 +40,9 @@ def _run_extract(job: JobState, *, expected_count: int) -> list[str]:
         str(job.video_path),
         "--output",
         str(job.frames_dir),
-        "-N",
-        str(expected_count),
     ]
+    if expected_count is not None:
+        cmd.extend(["-N", str(expected_count)])
     result = subprocess.run(cmd, capture_output=True, text=True, check=False)
     if result.returncode != 0:
         detail = (result.stderr or result.stdout or "extract failed").strip()
@@ -216,7 +215,7 @@ async def _set_status(job: JobState, status: str, message: str) -> None:
 async def run_job(
     job: JobState,
     *,
-    expected_count: int = DEFAULT_EXPECTED_COUNT,
+    expected_count: int | None = None,
 ) -> None:
     try:
         await _set_status(job, "extracting", "Extracting garment frames from video…")
