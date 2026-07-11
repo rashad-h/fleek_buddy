@@ -7,3 +7,4 @@ venv/
 .mypy_cache/
 *.egg-info/
 .pytest_cache/
+.DS_Store
