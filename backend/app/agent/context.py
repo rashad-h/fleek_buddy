@@ -107,7 +107,17 @@ def negotiation_state_block(ctx: NegotiationContext) -> str:
     lines = [
         "## Negotiation state",
         f"Round {buyer_turns}. Buyer's standing offer: {offer}.",
+        "The standing offer comes from the offer box and can be stale: many "
+        "buyers type their price in the message instead. A price in the "
+        "buyer's latest message is their real offer; report it in "
+        "`buyer_price` and negotiate against that number, not the box.",
     ]
+    if negotiation.current_offer is not None:
+        lines.append(
+            f"Never report £{negotiation.current_offer} as `buyer_price`: "
+            f"that number is already known. Only a different price from "
+            f"their latest message, else null."
+        )
     last_counter = next(
         (
             m

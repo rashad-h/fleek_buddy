@@ -8,6 +8,8 @@ from app.routers import items, merchant, negotiations
 
 logging.basicConfig(level=logging.INFO)
 
+logging.basicConfig(level=logging.INFO)
+
 app = FastAPI(title="Fleek Buddy API")
 
 app.add_middleware(

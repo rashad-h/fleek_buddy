@@ -28,6 +28,7 @@ from app.agent.policy import (
     apply_guardrails,
     fallback_reply,
     firm_price_reply,
+    reconcile_text_offer,
 )
 from app.agent.prompts import VOICE_NOTE
 from app.agent.schemas import AgentDecision
@@ -60,11 +61,12 @@ async def decide(ctx: NegotiationContext) -> AgentDecision:
         except Exception:
             logger.exception("agent LLM call failed; using fallback reply")
             return fallback_reply()
-        guarded = apply_guardrails(raw, ctx)
+        guarded = reconcile_text_offer(raw, ctx) or apply_guardrails(raw, ctx)
         logger.info(
-            "raw LLM decision: %s £%s %s | guarded: %s £%s | voice_note: %s",
+            "raw LLM decision: %s £%s buyer_price=%s %s | guarded: %s £%s | voice_note: %s",
             raw.action,
             raw.price,
+            raw.buyer_price,
             raw.selection,
             guarded.decision.action,
             guarded.decision.price,

@@ -23,12 +23,17 @@ def _models() -> list[str]:
     return models
 
 
+REQUEST_TIMEOUT_SECONDS = 30
+
+
 async def complete(messages: list[dict]) -> str:
     """Non-streaming completion with a simple fallback to the next model."""
     last_error: Exception | None = None
     for model in _models():
         try:
-            response = await litellm.acompletion(model=model, messages=messages)
+            response = await litellm.acompletion(
+                model=model, messages=messages, timeout=REQUEST_TIMEOUT_SECONDS
+            )
             return response.choices[0].message.content or ""
         except Exception as exc:  # noqa: BLE001 - fall through to the fallback model
             last_error = exc
@@ -46,7 +51,10 @@ async def complete_structured[T: BaseModel](messages: list[dict], schema: type[T
     for model in _models():
         try:
             response = await litellm.acompletion(
-                model=model, messages=messages, response_format=schema
+                model=model,
+                messages=messages,
+                response_format=schema,
+                timeout=REQUEST_TIMEOUT_SECONDS,
             )
             content = response.choices[0].message.content or ""
             return _parse_structured(content, schema)

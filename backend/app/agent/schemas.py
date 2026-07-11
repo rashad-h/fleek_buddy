@@ -14,10 +14,14 @@ class AgentDecision(BaseModel):
     `action == "counter"`. `selection` scopes that price to specific grade
     quantities (None = the buyer's current scope / full bundle) and lets the
     seller counter with different quantities than the buyer asked for.
-    `message` is what the seller says to the buyer.
+    `buyer_price` is the price the buyer named in their latest message when
+    it differs from the standing offer; it only replaces the standing offer
+    after `policy.adopt_text_offer` verifies the number appears verbatim in
+    that message. `message` is what the seller says to the buyer.
     """
 
     action: AgentAction
     price: float | None = Field(default=None, gt=0)
+    buyer_price: float | None = Field(default=None, gt=0)
     selection: list[OfferSelection] | None = None
     message: str

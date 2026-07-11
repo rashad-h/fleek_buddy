@@ -23,10 +23,14 @@ SSE_HEADERS = {"Cache-Control": "no-cache", "X-Accel-Buffering": "no"}
 
 
 async def _load_negotiation(session: AsyncSession, negotiation_id: int) -> Negotiation:
+    # populate_existing: with expire_on_commit=False the identity map would
+    # otherwise return the instance with its pre-commit (stale) messages
+    # collection, and the agent would never see the newest buyer message.
     result = await session.execute(
         select(Negotiation)
         .options(selectinload(Negotiation.messages), selectinload(Negotiation.item))
         .where(Negotiation.id == negotiation_id)
+        .execution_options(populate_existing=True)
     )
     negotiation = result.scalar_one_or_none()
     if negotiation is None:
