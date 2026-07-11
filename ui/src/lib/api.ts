@@ -3,6 +3,7 @@ import type {
   Item,
   Negotiation,
   NegotiationDetail,
+  OfferSelection,
 } from '#/lib/types.ts'
 
 const API_BASE = import.meta.env.VITE_API_URL ?? '/api'
@@ -43,6 +44,7 @@ export type CreateNegotiationInput = {
   item_id: number
   buyer_id: string
   offer_price: number
+  selection?: Array<OfferSelection>
   message?: string
 }
 
@@ -59,6 +61,13 @@ export function fetchNegotiation(
   id: number | string,
 ): Promise<NegotiationDetail> {
   return request<NegotiationDetail>(`/negotiations/${id}`)
+}
+
+/** Accept the seller's standing counter-offer; locks the deal. */
+export function acceptCounter(id: number): Promise<NegotiationDetail> {
+  return request<NegotiationDetail>(`/negotiations/${id}/accept`, {
+    method: 'POST',
+  })
 }
 
 export type StreamHandlers = {

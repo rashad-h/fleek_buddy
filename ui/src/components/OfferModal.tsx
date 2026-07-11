@@ -1,11 +1,20 @@
+import { useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 
 import { createNegotiation } from '#/lib/api.ts'
 import { formatGBP, perPiece } from '#/lib/format.ts'
+import {
+  gradesFromCondition,
+  selectionPieces,
+  toSelection,
+} from '#/lib/selection.ts'
 import { Button } from '#/components/ui/button.tsx'
+import { GradePicker } from '#/components/GradePicker.tsx'
 import { Input } from '#/components/ui/input.tsx'
 import { Label } from '#/components/ui/label.tsx'
+import { Switch } from '#/components/ui/switch.tsx'
+import { Textarea } from '#/components/ui/textarea.tsx'
 import {
   Dialog,
   DialogContent,
@@ -32,6 +41,15 @@ export function OfferModal({
   onCreated,
 }: OfferModalProps) {
   const queryClient = useQueryClient()
+  const grades = gradesFromCondition(item.condition)
+  const [partial, setPartial] = useState(false)
+  const [quantities, setQuantities] = useState<Record<string, number>>({})
+
+  const selection = partial ? toSelection(quantities) : []
+  const offerPieces =
+    partial && selection.length > 0
+      ? selectionPieces(selection)
+      : item.piece_count
 
   const create = useMutation({
     mutationFn: createNegotiation,
@@ -51,15 +69,18 @@ export function OfferModal({
         item_id: item.id,
         buyer_id: buyerId,
         offer_price: Number(value.offer),
+        ...(partial && selection.length > 0 ? { selection } : {}),
         message: value.message.trim() || undefined,
       })
       form.reset()
+      setPartial(false)
+      setQuantities({})
     },
   })
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent>
+      <DialogContent className="sm:max-w-lg">
         <DialogHeader>
           <DialogTitle>Make an offer</DialogTitle>
           <DialogDescription>
@@ -74,6 +95,34 @@ export function OfferModal({
             void form.handleSubmit()
           }}
         >
+          {grades.length > 1 && (
+            <div className="flex flex-col gap-2 rounded-lg border p-3">
+              <div className="flex items-center justify-between">
+                <Label htmlFor="partial-offer">
+                  Offer on specific grades only
+                </Label>
+                <Switch
+                  id="partial-offer"
+                  checked={partial}
+                  onCheckedChange={setPartial}
+                />
+              </div>
+              {partial && (
+                <>
+                  <GradePicker
+                    grades={grades}
+                    maxPieces={item.piece_count}
+                    quantities={quantities}
+                    onChange={setQuantities}
+                  />
+                  <p className="text-xs text-muted-foreground">
+                    The seller confirms availability per grade in chat — ask for
+                    the exact split there.
+                  </p>
+                </>
+              )}
+            </div>
+          )}
           <form.Field
             name="offer"
             validators={{
@@ -88,7 +137,11 @@ export function OfferModal({
           >
             {(field) => (
               <div className="flex flex-col gap-1.5">
-                <Label htmlFor="offer">Your offer for the bundle (£)</Label>
+                <Label htmlFor="offer">
+                  {partial && selection.length > 0
+                    ? `Your offer for ${offerPieces} pieces (£)`
+                    : 'Your offer for the bundle (£)'}
+                </Label>
                 <Input
                   id="offer"
                   type="number"
@@ -98,9 +151,9 @@ export function OfferModal({
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
-                {Number(field.state.value) >= 1 && (
+                {Number(field.state.value) >= 1 && offerPieces > 0 && (
                   <p className="text-xs text-muted-foreground">
-                    That's {perPiece(Number(field.state.value), item.piece_count)}
+                    That's {perPiece(Number(field.state.value), offerPieces)}
                   </p>
                 )}
                 {field.state.meta.errors.length > 0 && (
@@ -115,9 +168,10 @@ export function OfferModal({
             {(field) => (
               <div className="flex flex-col gap-1.5">
                 <Label htmlFor="offer-message">Message (optional)</Label>
-                <Input
+                <Textarea
                   id="offer-message"
-                  placeholder="Any context for the seller…"
+                  rows={3}
+                  placeholder="Any context for the seller — grades you care about, timelines, questions…"
                   value={field.state.value}
                   onChange={(e) => field.handleChange(e.target.value)}
                 />
@@ -129,7 +183,11 @@ export function OfferModal({
               Could not send the offer. Try again.
             </p>
           )}
-          <Button type="submit" size="lg" disabled={create.isPending}>
+          <Button
+            type="submit"
+            size="lg"
+            disabled={create.isPending || (partial && selection.length === 0)}
+          >
             {create.isPending ? 'Sending…' : 'Send offer'}
           </Button>
         </form>

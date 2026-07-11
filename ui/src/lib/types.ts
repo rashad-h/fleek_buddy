@@ -25,12 +25,19 @@ export type NegotiationStatus = 'open' | 'accepted' | 'rejected'
 
 export type MessageAction = 'offer' | 'counter' | 'accept' | 'reject' | 'chat'
 
+/** One line of a partial offer; null selections mean the full bundle. */
+export type OfferSelection = {
+  grade: string
+  quantity: number
+}
+
 export type Negotiation = {
   id: number
   item_id: number
   buyer_id: string
   status: NegotiationStatus
   current_offer: number | null
+  current_selection: Array<OfferSelection> | null
   agreed_price: number | null
   created_at: string
   updated_at: string
@@ -42,6 +49,7 @@ export type Message = {
   role: 'buyer' | 'agent' | 'system'
   content: string
   offer_amount: number | null
+  offer_selection: Array<OfferSelection> | null
   action: MessageAction | null
   created_at: string
 }
@@ -51,6 +59,7 @@ export type NegotiationDetail = Negotiation & { messages: Array<Message> }
 export type DecisionEvent = {
   action: MessageAction
   price: number | null
+  selection: Array<OfferSelection> | null
   status: NegotiationStatus
   message_id: number
 }
