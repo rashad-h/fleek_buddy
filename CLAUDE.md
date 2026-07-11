@@ -50,3 +50,36 @@ the `db` service.
 ## Comments
 
 Keep them sparse — only where intent isn't obvious from the code.
+
+
+## git
+- Use conventinal commits
+- When pushing, only run `git push`
+- When creating a commit, only add a commit message, no description
+- Do not mention you co-authored the PR
+
+## Tone for any commented code
+- Be clear but concise. Use plain language
+- Prefer short but meaningful sentences over the use of hyphen/double hyphen, unless it reaaly fits a sentence
+
+## Comments
+- Only comment where anything really needs explenation, is unclear or has dependencies that the reader should be aware of
+- Never use separators as comments, e.g. long sequence of `-` with some text
+
+## Documentation
+- Includes:
+	- Class descriptions
+	- Function documentation
+	- Method documentation
+	- Module/package documentation
+	- Examples
+- Only include what a reader should now
+- Focus on the purpose and usage of a code element
+
+## Python
+- When possible add typing
+- Never use `any` for typing
+- Prefer a `TypeDict` with info on the return object over `dict` as type hint
+
+## Typescript
+- Never use `Any`/`any` for typing
