@@ -1,0 +1,7 @@
+# pnpm 10+ requires dependency install scripts to be allowlisted before they run.
+# Without this, native deps (esbuild etc.) are skipped and Vite breaks.
+allowBuilds:
+  '@google/genai': true
+  esbuild: true
+  protobufjs: true
+  unrs-resolver: true
