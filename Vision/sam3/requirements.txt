@@ -11,6 +11,7 @@
 # https://pytorch.org before / instead of the torch pin below if needed.
 
 torch>=2.5.0
+torchvision>=0.20.0
 transformers>=4.57.0
 accelerate>=1.0.0
 huggingface_hub>=0.26.0

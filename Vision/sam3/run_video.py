@@ -119,6 +119,22 @@ def tracks_from_frame(
     return tracks
 
 
+def load_video_frames(video_path: str | Path, max_frames: int | None = None):
+    """Load RGB frames; prefer OpenCV (handles .m4v on macOS better than PyAV).
+
+    Note: OpenCV ``num_frames`` can return fewer frames than requested. Always
+    use ``len(frames)`` / metadata ``frames_indices`` as the source of truth.
+    """
+    kwargs = {"backend": "opencv"}
+    if max_frames is not None:
+        kwargs["num_frames"] = max_frames
+    try:
+        return load_video(str(video_path), **kwargs)
+    except Exception:
+        kwargs["backend"] = "pyav"
+        return load_video(str(video_path), **kwargs)
+
+
 def run_video(
     video_path: str | Path,
     prompts: list[str],
@@ -126,9 +142,20 @@ def run_video(
     max_frames: int | None = None,
     image_size: int | None = None,
     model_id: str = MODEL_ID,
-) -> dict[int, list[GarmentTrack]]:
+) -> tuple[dict[int, list[GarmentTrack]], list[int]]:
     model, processor, device, dtype = load_model(model_id=model_id, image_size=image_size)
-    video_frames, _ = load_video(str(video_path))
+    video_frames, metadata = load_video_frames(video_path, max_frames=max_frames)
+    # Keep indices aligned with frames actually returned (OpenCV can skip undecodable ones).
+    raw_indices = getattr(metadata, "frames_indices", None)
+    if raw_indices is not None and len(raw_indices) == len(video_frames):
+        source_indices = [int(i) for i in raw_indices]
+    else:
+        source_indices = list(range(len(video_frames)))
+        if raw_indices is not None:
+            print(
+                f"Warning: metadata had {len(raw_indices)} indices but "
+                f"{len(video_frames)} frames loaded; using 0..{len(video_frames)-1}"
+            )
 
     inference_session = processor.init_video_session(
         video=video_frames,
@@ -140,16 +167,17 @@ def run_video(
     processor.add_text_prompt(inference_session, prompts)
 
     tracks_by_frame: dict[int, list[GarmentTrack]] = {}
+    # Track all loaded frames, not the requested max_frames count.
     for model_outputs in model.propagate_in_video_iterator(
         inference_session=inference_session,
-        max_frame_num_to_track=max_frames,
+        max_frame_num_to_track=len(video_frames),
         show_progress_bar=True,
     ):
         processed = processor.postprocess_outputs(inference_session, model_outputs)
         frame_idx = int(model_outputs.frame_idx)
         tracks_by_frame[frame_idx] = tracks_from_frame(frame_idx, processed)
 
-    return tracks_by_frame
+    return tracks_by_frame, source_indices
 
 
 def summarize(tracks_by_frame: dict[int, list[GarmentTrack]]) -> dict:
@@ -195,7 +223,7 @@ def main() -> None:
     if not args.video.exists():
         raise SystemExit(f"Video not found: {args.video}")
 
-    tracks_by_frame = run_video(
+    tracks_by_frame, source_indices = run_video(
         args.video,
         args.prompts,
         max_frames=args.max_frames,
@@ -205,6 +233,8 @@ def main() -> None:
     payload = {
         "video": str(args.video),
         "prompts": args.prompts,
+        "max_frames_requested": args.max_frames,
+        "source_frame_indices": source_indices,
         "summary": summary,
         "frames": {
             str(frame_idx): [t.to_public_dict() for t in tracks]

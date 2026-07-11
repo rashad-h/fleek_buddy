@@ -47,6 +47,40 @@ python run_video.py data/Sample-video-mp4.m4v --max-frames 50
 
 Writes `outputs/tracks.json` (masks omitted from JSON). Prints a short summary of unique item IDs per prompt.
 
+## Export best full frames (coarse → refine)
+
+**Time-optimized flow:** SAM only needs a coarse pass to find *when* each item appears.
+Then export searches a local raw-video window around each slot for a cleaner frame
+(sharp / low clutter / settled) — **no extra SAM**.
+
+```bash
+# 1) Coarse detect (~30 SAM frames ≈ a few minutes, not 15)
+python run_video.py data/Sample-video-mp4.m4v --max-frames 30 --prompts jacket coat
+
+# 2) Split into target_items + refine best full frame locally
+python export_crops.py --target-items 15 --hand-region top-right --out outputs/frames
+```
+
+Optional refine knobs:
+- `--refine-half-window 24` — wider local search
+- `--refine-step 1` — every source frame in the window (slower, cleaner)
+- `--no-refine` — only use coarse tracked frames
+
+`--hand-region` options: `top-right` (default), `top-left`, `top`, `bottom-right`, `bottom-left`, `bottom`, `right`, `left`.
+
+If two neighbors still look identical, raise merge sensitivity:
+
+```bash
+python export_crops.py --target-items 15 --hand-region top-right --similarity-threshold 0.28
+```
+
+Then describe with VLM:
+
+```bash
+cd ../vlm && source .venv/bin/activate
+python describe_crops.py ../sam3/outputs/frames --out outputs/listings_frames.json
+```
+
 ## Layout
 
 | Path | Role |
