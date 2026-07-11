@@ -1,212 +1,262 @@
 # Fleek Buddy
 
-A Fleek-style wholesale marketplace demo where **you are the buyer** and every
-listing is defended by an **LLM seller agent** that haggles with you in a
-real-time chat: it counters, holds firm, accepts or walks away based on each
-item's confidential haggle metadata. Offers can cover the full bundle or just
-specific grades (e.g. "10× Grade A + 5× Grade B"), and the seller negotiates
-price *and* quantities — upselling other grades, correcting availability, and
-rewarding bigger takes.
+A Fleek-style wholesale marketplace demo with two sides:
+
+1. **Buyer marketplace** — you browse seeded (and merchant-published) bundles and
+   haggle with an **LLM seller agent** in a real-time chat. Offers can cover the
+   full lot or specific grades; the agent counters, holds firm, accepts, or
+   walks away using confidential floors and stock.
+2. **Merchant dashboard** (`/merchant`) — suppliers upload a haul video; the
+   backend extracts garment frames, runs Gemini vision on each frame in
+   parallel, builds one wholesale listing, and publishes it into the same
+   buyer catalogue (with a full image gallery).
+
+Judge-facing walkthrough: see [`DEMO.md`](./DEMO.md).
 
 ## Architecture
 
 ```
-browser :3000 ──> ui (TanStack Start, Vite dev server)
-                    └── /api proxy ──> backend :8000 (FastAPI)
-                                          ├── Postgres :5432 (items, negotiations, messages)
-                                          └── LiteLLM ──> Anthropic / OpenAI (seller agent)
+browser :3000 ──> ui (TanStack Start / Vite)
+                    ├── /api proxy ──> backend :8000   (full Docker: make dev)
+                    └── or VITE_API_URL ──> host :8000 (merchant: make dev-merchant
+                                                        + make dev-backend-host)
+                                          ├── Postgres :5432
+                                          ├── LiteLLM ──> OpenRouter / Anthropic / OpenAI
+                                          │                 (seller agent)
+                                          └── Vision/ (host only)
+                                                ├── pySceneDetect  → frames
+                                                └── vlm (Gemini)   → per-garment JSON
 ```
 
-- `ui/` — presentation only. TanStack Start + Query, Tailwind v4, shadcn/ui.
-  All data comes from the backend through the Vite `/api` proxy (no CORS, no
-  keys in the browser).
-- `backend/` — FastAPI + async SQLAlchemy. The seller agent lives in
-  `backend/app/agent/`: one structured LLM call per turn, deterministic
-  guardrails on top (never sells below the floor), reply streamed as SSE.
+| Area | Stack |
+| --- | --- |
+| `ui/` | TanStack Start + Query, Tailwind v4, shadcn/ui |
+| `backend/` | FastAPI, async SQLAlchemy, Alembic, LiteLLM |
+| `Vision/pySceneDetect/` | OpenCV scene / flip-hold extractor |
+| `Vision/vlm/` | LiteLLM → Gemini for garment attributes |
 
-## Quickstart
+## What we built (merchant + catalogue)
 
-Requires Docker. One command runs everything:
+### End-to-end merchant pipeline
+
+1. **Upload or sample video** on `/merchant` (optional expected item count).
+2. **Extract frames** via `Vision/pySceneDetect/extract.py` (`-N` only when a
+   count is provided; otherwise unconstrained).
+3. **Describe every frame in parallel** with Gemini
+   (`Vision/vlm/describe_crops.py --workers N`).
+4. **Bundle summary** — local synthesis from per-item JSON (instant; avoids a
+   second Gemini hang). Optional Gemini polish behind `MERCHANT_SUMMARY_LLM=1`.
+5. **Review in the merchant UI** — live SSE progress, garment cards, summary.
+6. **Publish** — one marketplace `Item` (`vendor_name=Video Catalog`) with:
+   - listing copy from the summary
+   - `image_url` + `image_urls` (all frames copied to `ui/public/merchant/{job_id}/`)
+   - negotiable pricing, floors, and synthetic A/B `grades` for the seller agent
+
+Job artifacts live under `backend/data/merchant_jobs/{job_id}/` (gitignored):
+`video`, `frames/`, `listings.json`, `summary.json`, logs.
+
+### Buyer gallery
+
+Items expose `image_urls` (JSONB). The item detail page shows a thumbnail strip
+when more than one image exists. Seeded listings get a one-element gallery;
+published video lots include every extracted frame.
+
+### Host vs Docker (important for merchant)
+
+Merchant Vision tooling needs **macOS host venvs** (OpenCV / Gemini). The Docker
+backend does **not** mount `Vision/`, so extraction fails there with paths like
+`/Vision/pySceneDetect/extract.py`.
+
+Use:
 
 ```bash
-cp .env.example .env          # add your ANTHROPIC_API_KEY (the agent needs it)
+make setup-vision-envs   # once
+make dev-merchant        # terminal 1: db + ui
+make dev-backend-host    # terminal 2: API on host :8000
+```
+
+`docker-compose.yml` no longer makes `ui` depend on `backend`, so merchant mode
+does not secretly restart the Docker API and steal port 8000.
+
+### Seller agent env loading
+
+The host API runs from `backend/`. Settings now load **both**
+`backend/.env` and the monorepo root `.env` (where keys usually live). Without
+that, LiteLLM fell back to `anthropic/claude-sonnet-5` with no key and the
+agent replied *“Sorry, I lost my train of thought…”*.
+
+Match `LLM_MODEL` to a configured key (this repo often uses OpenRouter).
+
+## Quickstart (buyer marketplace only)
+
+```bash
+cp .env.example .env          # set OPENROUTER_API_KEY / ANTHROPIC_API_KEY / etc.
 make dev                      # ui → http://localhost:3000, api → :8000/docs
-make seed                     # in a second terminal: load the 9 demo bundles
+make seed                     # second terminal: Seeded 9 bundles.
 ```
 
 Migrations apply automatically when the backend container starts.
 
+## Merchant quickstart
+
+```bash
+cp .env.example .env
+# set GEMINI_API_KEY (required for per-frame VLM)
+# set LLM_* keys (required for buyer haggling after publish)
+
+make setup-vision-envs
+# also put GEMINI_API_KEY in Vision/vlm/.env if you prefer
+
+# terminal 1
+make dev-merchant
+
+# terminal 2
+make dev-backend-host
+
+# optional: seed the 9 demo bundles
+make seed   # needs a running backend that can reach Postgres
+# with host API: cd backend && .venv/bin/python seed.py
+```
+
+Open http://localhost:3000/merchant — upload a video or **Use demo sample**.
+Leave **Expected items** blank for auto detection, or set `N` to trim to that count.
+
+After processing completes, **Publish to catalogue**, then open the new listing
+on the buyer dashboard and make an offer.
+
 ## Pre-demo checklist
 
-Do this ~10 minutes before demoing:
+1. `make nuke` — wipe containers **and** the DB volume (fresh start).
+2. For buyer-only: `make dev` then `make seed`.
+3. For merchant: `make setup-vision-envs`, then `make dev-merchant` +
+   `make dev-backend-host`, then seed via host `python seed.py` if needed.
+4. Confirm http://localhost:3000 shows cards; `/merchant` can run a sample.
+5. Dry-run one full haggle including accept; confirm firm-price North Face.
+6. If anything is off: `make logs` / host API terminal / `make logs-ui`.
 
-1. `make nuke` — wipe containers **and** the database volume (fresh start).
-2. `make dev` — wait until the ui, backend and db services are all up
-   (backend logs end with `Application startup complete`).
-3. `make seed` — should print `Seeded 9 bundles.`
-4. Open http://localhost:3000 — verify all 9 product cards render with
-   images, per-piece prices and discount badges.
-5. Dry-run one full haggle (see demo script below) **including an accept**,
-   then reload the page — the item should show the deal as agreed.
-6. Open "The North Face Fleeces" and lowball it — the agent must hold firm
-   (this item is seeded `negotiable=false`).
-7. If anything is off: `make logs` / `make logs-ui`.
+## Demo script (buyer)
 
-## Demo script
+1. Dashboard → **Under Armour Sexy Shorts**.
+2. **Make an offer** at a lowball — agent counters; floors stay hidden.
+3. Haggle or **Accept seller's offer**.
+4. Grade play on **Nike Vintage Tees Mix** — partial A/B selection.
+5. Bonus: firm-price North Face; second browser profile as another buyer.
 
-1. Dashboard → open **Under Armour Sexy Shorts** (£120.15 bundle, £2.67/pc,
-   45 pieces — the real Fleek listing, photo included).
-2. Click **Make an offer**, offer **£70** — the chat drawer opens and the
-   agent counters in real time (it never goes meaningfully below its hidden
-   floor of ~£96; a ~2% flex to close on a round number is allowed).
-3. Haggle in the chat; send **£100** as a new offer ("Offer £" field), or
-   hit the gold **Accept seller's offer** button under any counter.
-4. Deal → gold "transaction complete" banner, chat locks.
-5. Grade play: open **Nike Vintage Tees Mix**, toggle **Offer on specific
-   grades only**, ask for 10× A + 5× B — the seller prices that subset and
-   upsells the rest. Ask "how many A-grade do you have?" (he knows the split
-   even though the listing doesn't show it) or ask for photos (he'll promise
-   pictures later).
-6. Bonus: show the North Face item refusing to budge, or open a second
-   browser profile to run a parallel negotiation as another buyer.
+Full judge script: [`DEMO.md`](./DEMO.md).
 
 ## How the seller agent works
 
-Per buyer turn, the backend builds a context from pluggable providers
-(`backend/app/agent/context.py`): listing facts, the confidential per-grade
-stock (counts, per-piece prices and floors — shareable in chat on request,
-floors never), the haggle policy (cost, floors, `negotiable`,
-`high_quantity`), and the negotiation state including the offer's scope. One
-LiteLLM call returns a structured decision (`counter | accept | reject |
-chat` + price + grade selection + message); code-level guardrails
-(`policy.py`) then clamp it — accepts below the floor *for those exact
-pieces* become counters, counter selections are capped to real stock,
-counters on an unchanged scope only move downwards, and non-negotiable items
-short-circuit the LLM entirely. Floors allow a small closing flex
-(`pricing.FLOOR_FLEX`, 2%): £135 against a £137 floor is a deal, £120 is
-not. The final message streams to the browser as SSE tokens.
+Per buyer turn (`backend/app/agent/`):
 
-To enrich the agent with a new context source, add one function to
-`CONTEXT_PROVIDERS` in `context.py`.
+1. Build context from pluggable providers in `context.py` (listing, grades,
+   haggle policy, negotiation state).
+2. One structured LiteLLM call → `AgentDecision`.
+3. Deterministic guardrails in `policy.py` (never below floor for the
+   selected scope; stock caps; firm-price short-circuit).
+4. Stream the final message as SSE tokens.
+
+To add a context source, append a provider to `CONTEXT_PROVIDERS`.
+
+Teammates also have `feat/agent-vision-signals` (not necessarily on `main`):
+aggregates VLM defects / talking points into confidential `Item.vision_signals`
+for photo-aware haggling. Merge that branch when you want vision in the agent.
 
 ## Item haggle metadata
 
-Each seeded item carries (never exposed via the API): `buying_price` (what
-the seller paid), `lowest_bundle_price` / `lowest_price_per_piece` (floor),
-and `grades` — the per-grade stock breakdown (count, delivered price/piece,
-floor/piece). Counts are allocated from the condition label per the grading
-ratios (AB → 70/30, BC → 60/40, ABC → 30/40/30) and per-grade prices sum
-back to the bundle price. Public flags: `negotiable` and `high_quantity`
-(high stock makes the agent concede faster). Tune everything in
-`backend/seed.py`.
+Confidential (not on public `ItemRead`): `buying_price`,
+`lowest_bundle_price` / `lowest_price_per_piece`, `grades[]`.
+
+Public flags: `negotiable`, `high_quantity`.
+
+Merchant publish fills demo constants (ask / floor / buying per piece) plus a
+70/30 A/B grade split so make-offer works immediately after publish.
+
+Tune seeded catalogue in `backend/seed.py`.
 
 ## Environment variables (root `.env`)
 
-| Variable             | Purpose                                                  |
-| -------------------- | -------------------------------------------------------- |
-| `LLM_MODEL`          | LiteLLM model; when unset, defaults per available key (OpenRouter → Anthropic → OpenAI) |
-| `LLM_FALLBACK_MODEL` | Optional second model tried on failure                   |
-| `ANTHROPIC_API_KEY`  | For `anthropic/...` models                               |
-| `OPENAI_API_KEY`     | For `openai/...` models                                  |
-| `OPENROUTER_API_KEY` | For `openrouter/...` models (e.g. `openrouter/deepseek/deepseek-v4-flash`) |
-| `DATABASE_URL`       | Only for running the backend outside Docker              |
+| Variable | Purpose |
+| --- | --- |
+| `LLM_MODEL` | LiteLLM model; unset → first available key (OpenRouter → Anthropic → OpenAI) |
+| `LLM_FALLBACK_MODEL` | Optional second model on failure |
+| `ANTHROPIC_API_KEY` | For `anthropic/...` |
+| `OPENAI_API_KEY` | For `openai/...` |
+| `OPENROUTER_API_KEY` | For `openrouter/...` (e.g. `openrouter/deepseek/deepseek-v4-flash`) |
+| `GEMINI_API_KEY` | Merchant per-frame VLM (`Vision/vlm`) |
+| `MERCHANT_SUMMARY_LLM` | Set `1` to try Gemini polish on the bundle summary (off by default) |
+| `DATABASE_URL` | Host backend → Postgres (`postgresql+asyncpg://…@localhost:5432/app`) |
+| `VITE_API_URL` | Set by `make dev-merchant` to `http://localhost:8000/api` |
+| `BACKEND_URL` | Set by `make dev-merchant` to `http://host.docker.internal:8000` |
 
-The agent needs the API key matching your `LLM_MODEL` provider. With
-`LLM_MODEL` unset, the first configured key picks the model
-(`openrouter/deepseek/deepseek-v4-flash`, `anthropic/claude-sonnet-5`, or
-`openai/gpt-5.1`).
-
-Without an API key the app still runs: the agent answers with a safe canned
-reply (and non-negotiable items always work), but real haggling needs a key.
+Without an LLM key the app still runs; the agent falls back to a canned reply.
 
 ## Make commands
 
-| Command                      | What it does                                   |
-| ---------------------------- | ---------------------------------------------- |
-| `make dev`                   | Build + start ui, backend and Postgres         |
-| `make seed`                  | Load the demo catalogue (idempotent)           |
-| `make nuke`                  | Stop everything and wipe the DB volume         |
-| `make down`                  | Stop containers (keep data)                    |
-| `make migrate`               | `alembic upgrade head` in the backend          |
-| `make makemigration m="..."` | Autogenerate a migration                       |
-| `make logs` / `make logs-ui` | Tail backend / ui logs                         |
-| `make lint` / `make format`  | Ruff + ESLint / Ruff + Prettier                |
-| `make dev-merchant`          | UI + Postgres only (pair with `dev-backend-host`) |
-| `make dev-backend-host`      | Run API on host (stops Docker backend; frees :8000) |
-
-## Merchant dashboard (`/merchant`)
-
-Suppliers upload a haul video; the API extracts garment frames with
-`Vision/pySceneDetect`, then describes each frame with Gemini (`Vision/vlm`,
-`--workers 6`). Results stream to the UI as SSE events.
-
-1. Set up Vision envs once:
-
-```bash
-make setup-vision-envs
-# add GEMINI_API_KEY to Vision/vlm/.env and root .env
-```
-
-2. Add `GEMINI_API_KEY` to the root `.env` (and `Vision/vlm/.env`).
-
-3. In **two terminals**, start UI + host API (Docker backend must not own
-   port 8000):
-
-```bash
-# terminal 1 — UI + Postgres (talks to host API on :8000)
-make dev-merchant
-
-# terminal 2 — API on host (creates backend/.venv on first run)
-make dev-backend-host
-```
-
-Restart **both** after pulling this change so `VITE_API_URL` is picked up.
-
-If you already ran `make dev`, stop the Docker API first:
-`docker compose stop backend`, then run `make dev-backend-host`.
-
-4. Open http://localhost:3000/merchant — upload a video or click **Use demo
-   sample** (bundled under `Vision/sample_video/`).
-
-Uploaded videos and extracted frames are stored under
-`backend/data/merchant_jobs/{job_id}/` (gitignored).
+| Command | What it does |
+| --- | --- |
+| `make dev` | Build + start ui, backend, Postgres |
+| `make seed` | Load the 9 demo bundles (Docker backend) |
+| `make nuke` | Stop everything and wipe the DB volume |
+| `make down` | Stop containers (keep data) |
+| `make migrate` | `alembic upgrade head` |
+| `make makemigration m="..."` | Autogenerate a migration |
+| `make logs` / `make logs-ui` | Tail backend / ui |
+| `make lint` / `make format` | Ruff + ESLint / Ruff + Prettier |
+| `make setup-vision-envs` | Create pySceneDetect + VLM virtualenvs |
+| `make dev-merchant` | UI + Postgres for merchant (host API) |
+| `make dev-backend-host` | FastAPI on host; stops Docker backend |
 
 ## Troubleshooting
 
-- **Cards don't load / empty dashboard** — did you run `make seed`? Check
-  `curl localhost:8000/api/items`.
-- **Schema errors after pulling changes** — the demo replaces migrations
-  in-place; run `make nuke && make dev && make seed`.
-- **Agent replies "lost my train of thought"** — the LLM call failed; check
-  `ANTHROPIC_API_KEY` in `.env` and `make logs`.
-- **Chat doesn't stream** — the Vite proxy should pass SSE through; as a
-  fallback set `VITE_API_URL=http://localhost:8000/api` for the ui service
-  (backend CORS already allows it) and restart.
-- **Port clashes** — 3000, 8000 and 5432 must be free. `Address already in use`
-  on 8000 means Docker backend is still running; use `make dev-backend-host`
-  (it stops it) or `docker compose stop backend`.
-- **Merchant job fails immediately** — run `make dev-backend-host` (not the
-  Docker backend) and confirm Vision venvs + `GEMINI_API_KEY` are set.
-- **No frames extracted** — check `Vision/sample_video/` exists and
-  `Vision/pySceneDetect/.venv` is installed.
+- **Empty dashboard** — run `make seed` (or host `python seed.py`). Also check
+  the API is actually up: `curl localhost:8000/api/items`. If the Docker
+  backend crash-loops on `python-multipart`, rebuild: `docker compose build backend`.
+- **Agent “lost my train of thought”** — LLM auth failed. Confirm root `.env`
+  keys load on the **host** API (`LLM_MODEL` matches a non-empty key). Restart
+  `make dev-backend-host` after editing `.env`.
+- **Merchant: Missing extractor `/Vision/...`** — you are on the Docker
+  backend. Switch to `make dev-backend-host`.
+- **Port 8000 in use** — `docker compose stop backend` or
+  `make dev-backend-host` (stops it for you).
+- **No frames / Gemini errors** — `make setup-vision-envs`, set
+  `GEMINI_API_KEY`, check `Vision/vlm/.env` for empty placeholders / zero-width
+  characters in pasted keys.
+- **Summary hung / timed out** — default path is local summary (no second
+  Gemini). Do not enable `MERCHANT_SUMMARY_LLM` unless you need polish.
+- **Published images 404 on buyer** — frames must be under
+  `ui/public/merchant/{job_id}/` (publish copies them there).
+- **Schema errors after pull** — `make nuke && make dev && make seed`.
 
 ## Layout
 
 ```
 backend/
 ├── app/
-│   ├── main.py            # FastAPI app, /api routers, /health
-│   ├── models.py          # items, negotiations, messages
-│   ├── schemas.py         # public read/write schemas (no seller secrets)
-│   ├── llm.py             # LiteLLM wrapper + structured output
-│   ├── agent/             # seller agent: context, policy, negotiator, prompts
-│   ├── merchant/          # video job store + Vision pipeline orchestration
-│   └── routers/           # items, negotiations, merchant (+ SSE)
-├── alembic/               # migrations (auto-applied on start)
-└── seed.py                # demo catalogue
+│   ├── main.py              # FastAPI app, routers, /health
+│   ├── config.py            # settings (loads backend/.env + repo .env)
+│   ├── models.py            # items (+ image_urls), negotiations, messages
+│   ├── schemas.py           # public schemas (no seller secrets)
+│   ├── llm.py               # LiteLLM complete / structured / stream
+│   ├── agent/               # seller: context, policy, negotiator, prompts
+│   ├── merchant/            # jobs, pipeline, summarize, publish, paths, env
+│   └── routers/             # items, negotiations, merchant (+ SSE)
+├── alembic/                 # e.g. 0002_add_image_urls
+├── data/merchant_jobs/      # local job workspace (gitignored)
+└── seed.py
 ui/
 └── src/
-    ├── routes/            # index (dashboard), items.$itemId, merchant
-    ├── components/        # ProductCard, OfferModal, NegotiationDrawer, merchant/*
-    └── lib/               # api client + SSE parser, merchant-api, types
+    ├── routes/              # index, items.$itemId (gallery), merchant
+    ├── components/merchant/ # upload, status, garment cards, summary
+    └── lib/                 # api, merchant-api, types
+Vision/
+├── pySceneDetect/           # extract.py + .venv
+├── vlm/                     # describe_crops.py + .venv
+└── sample_video/            # demo haul clips
 ```
+
+## Related docs
+
+- [`DEMO.md`](./DEMO.md) — live demo script for judges
+- [`backend/app/agent/`](./backend/app/agent/) — seller agent modules
+- [`Vision/vlm/README.md`](./Vision/vlm/README.md) — Gemini / Qwen VLM setup
+- [`Vision/pySceneDetect/README.md`](./Vision/pySceneDetect/README.md) — frame extractor

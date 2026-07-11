@@ -15,8 +15,14 @@ def repo_root() -> Path:
     override = _env_path("REPO_ROOT")
     if override is not None:
         return override
-    # backend/app/merchant/paths.py -> repo root
-    return Path(__file__).resolve().parents[3]
+    # Host layout: <repo>/backend/app/merchant/paths.py → parents[3] = <repo>
+    here = Path(__file__).resolve()
+    candidate = here.parents[3]
+    if (candidate / "Vision" / "pySceneDetect").is_dir():
+        return candidate
+    # Docker layout is /app/app/... — Vision is not in the image. Callers should
+    # use make dev-backend-host (or set VISION_ROOT / REPO_ROOT).
+    return candidate
 
 
 def vision_root() -> Path:
@@ -36,6 +42,19 @@ def vlm_dir() -> Path:
 
 def sample_video_dir() -> Path:
     return vision_root() / "sample_video"
+
+
+def require_extract_script() -> Path:
+    """Return extract.py or raise a clear host-vs-Docker error."""
+    script = pyscene_dir() / "extract.py"
+    if script.is_file():
+        return script
+    raise RuntimeError(
+        f"Missing extractor: {script}. "
+        "Merchant video processing needs the host API "
+        "(make setup-vision-envs && make dev-backend-host), "
+        "not the Docker backend."
+    )
 
 
 def jobs_root() -> Path:

@@ -31,8 +31,11 @@ services:
     volumes:
       - ./ui:/app
       - /app/node_modules
+    # Do not depend on backend — merchant mode runs the API on the host
+    # (make dev-backend-host) while only db + ui stay in Compose.
     depends_on:
-      - backend
+      db:
+        condition: service_healthy
 
   db:
     image: postgres:17-alpine

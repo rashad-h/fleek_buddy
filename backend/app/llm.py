@@ -13,7 +13,7 @@ from app.config import settings
 for _field in ("anthropic_api_key", "openai_api_key", "openrouter_api_key"):
     _value = getattr(settings, _field)
     if _value:
-        os.environ.setdefault(_field.upper(), _value)
+        os.environ[_field.upper()] = _value
 
 
 def _models() -> list[str]:

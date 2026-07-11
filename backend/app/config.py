@@ -1,3 +1,5 @@
+from pathlib import Path
+
 from pydantic import field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -8,11 +10,21 @@ PROVIDER_DEFAULTS: list[tuple[str, str]] = [
     ("anthropic_api_key", "anthropic/claude-sonnet-5"),
     ("openai_api_key", "openai/gpt-5.1"),
 ]
+
 FALLBACK_DEFAULT_MODEL = "anthropic/claude-sonnet-5"
+
+_BACKEND_DIR = Path(__file__).resolve().parents[1]
+_REPO_ROOT = _BACKEND_DIR.parent
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+    # Host API runs from backend/; Docker also mounts backend at /app.
+    # Keys usually live in the monorepo root `.env` (compose env_file).
+    model_config = SettingsConfigDict(
+        env_file=(_BACKEND_DIR / ".env", _REPO_ROOT / ".env"),
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     # LLM (provider-agnostic via LiteLLM). Model format is "provider/model".
     # Set LLM_MODEL to override; otherwise the default follows your API key.
@@ -35,9 +47,12 @@ class Settings(BaseSettings):
     @classmethod
     def blank_to_none(cls, value: str | None) -> str | None:
         # `VAR=` lines in .env arrive as "" and would otherwise look configured.
-        if value is None or not value.strip():
+        # Browser/docs pastes can also include zero-width chars that break HTTP
+        # headers ("x-api-key header is required" / ascii codec errors).
+        if value is None:
             return None
-        return value
+        cleaned = "".join(ch for ch in str(value) if ch.isascii() and not ch.isspace())
+        return cleaned or None
 
     @model_validator(mode="after")
     def resolve_default_model(self) -> "Settings":

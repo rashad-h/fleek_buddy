@@ -10,7 +10,7 @@ from pathlib import Path
 
 from app.merchant.env import vlm_subprocess_env
 from app.merchant.jobs import JobState, job_store
-from app.merchant.paths import pyscene_dir, python_for, sample_video_dir, vlm_dir
+from app.merchant.paths import pyscene_dir, python_for, require_extract_script, sample_video_dir, vlm_dir
 from app.merchant.schemas import GarmentAttributesRead
 from app.merchant.summarize import summarize_listings
 
@@ -26,9 +26,7 @@ def _list_frame_files(frames_dir: Path) -> list[str]:
 
 
 def _run_extract(job: JobState, *, expected_count: int | None) -> list[str]:
-    extract_script = pyscene_dir() / "extract.py"
-    if not extract_script.is_file():
-        raise RuntimeError(f"Missing extractor: {extract_script}")
+    extract_script = require_extract_script()
 
     python = python_for(pyscene_dir(), label="pySceneDetect")
     job.frames_dir.mkdir(parents=True, exist_ok=True)
