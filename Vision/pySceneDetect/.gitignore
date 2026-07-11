@@ -1,0 +1,21 @@
+# Local env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+
+# Extracted / probe outputs (never commit images)
+frames/
+frames_*/
+_probe/
+_holds/
+_v2/
+_cands/
+_dup*/
+_dup_debug/
+*.jpg
+*.jpeg
+*.png
+*.webp
+gallery.html
+*.sharpness.txt
