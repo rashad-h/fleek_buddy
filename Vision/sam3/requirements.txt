@@ -1,0 +1,23 @@
+# Isolated SAM 3 video env — do not merge into the FastAPI app deps.
+# Docs: https://huggingface.co/docs/transformers/en/model_doc/sam3_video
+#
+# Install (from this directory):
+#   python3.12 -m venv .venv
+#   source .venv/bin/activate
+#   pip install -U pip
+#   pip install -r requirements.txt
+#
+# CUDA: install the torch build that matches your driver from
+# https://pytorch.org before / instead of the torch pin below if needed.
+
+torch>=2.5.0
+transformers>=4.57.0
+accelerate>=1.0.0
+huggingface_hub>=0.26.0
+safetensors>=0.4.0
+
+numpy>=1.26.0
+Pillow>=10.0.0
+opencv-python-headless>=4.10.0
+tqdm>=4.66.0
+av>=12.0.0

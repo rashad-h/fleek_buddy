@@ -1,0 +1,17 @@
+.venv/
+__pycache__/
+*.py[cod]
+.ruff_cache/
+.mypy_cache/
+.pytest_cache/
+*.egg-info/
+
+# local artifacts
+outputs/*
+!outputs/.gitkeep
+data/*
+!data/.gitkeep
+
+# HF / torch caches if someone points them here
+.cache/
+models/

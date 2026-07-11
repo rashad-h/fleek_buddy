@@ -7,4 +7,11 @@ venv/
 .mypy_cache/
 *.egg-info/
 .pytest_cache/
+
+# Vision SAM 3 local env / artifacts (also ignored under Vision/sam3/.gitignore)
+Vision/sam3/.venv/
+Vision/sam3/outputs/*
+!Vision/sam3/outputs/.gitkeep
+Vision/sam3/data/*
+!Vision/sam3/data/.gitkeep
 .DS_Store
