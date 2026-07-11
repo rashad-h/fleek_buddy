@@ -10,7 +10,7 @@ from app.config import settings
 
 # LiteLLM reads provider keys from the process environment. Mirror any keys
 # loaded from `.env` (via settings) into os.environ so both paths work.
-for _field in ("anthropic_api_key", "openai_api_key"):
+for _field in ("anthropic_api_key", "openai_api_key", "openrouter_api_key"):
     _value = getattr(settings, _field)
     if _value:
         os.environ.setdefault(_field.upper(), _value)

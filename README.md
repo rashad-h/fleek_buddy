@@ -83,13 +83,19 @@ the agent concede faster). Tune them in `backend/seed.py`.
 
 ## Environment variables (root `.env`)
 
-| Variable             | Purpose                                             |
-| -------------------- | --------------------------------------------------- |
-| `ANTHROPIC_API_KEY`  | Seller agent LLM (required for real negotiations)   |
-| `LLM_MODEL`          | LiteLLM model, default `anthropic/claude-sonnet-5`  |
-| `LLM_FALLBACK_MODEL` | Optional second model tried on failure              |
-| `OPENAI_API_KEY`     | Only if you switch `LLM_MODEL` to an OpenAI model   |
-| `DATABASE_URL`       | Only for running the backend outside Docker         |
+| Variable             | Purpose                                                  |
+| -------------------- | -------------------------------------------------------- |
+| `LLM_MODEL`          | LiteLLM model; when unset, defaults per available key (OpenRouter → Anthropic → OpenAI) |
+| `LLM_FALLBACK_MODEL` | Optional second model tried on failure                   |
+| `ANTHROPIC_API_KEY`  | For `anthropic/...` models                               |
+| `OPENAI_API_KEY`     | For `openai/...` models                                  |
+| `OPENROUTER_API_KEY` | For `openrouter/...` models (e.g. `openrouter/deepseek/deepseek-v4-flash`) |
+| `DATABASE_URL`       | Only for running the backend outside Docker              |
+
+The agent needs the API key matching your `LLM_MODEL` provider. With
+`LLM_MODEL` unset, the first configured key picks the model
+(`openrouter/deepseek/deepseek-v4-flash`, `anthropic/claude-sonnet-5`, or
+`openai/gpt-5.1`).
 
 Without an API key the app still runs: the agent answers with a safe canned
 reply (and non-negotiable items always work), but real haggling needs a key.
