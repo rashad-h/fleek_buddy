@@ -11,8 +11,6 @@ A Fleek-style wholesale marketplace demo with two sides:
    parallel, builds one wholesale listing, and publishes it into the same
    buyer catalogue (with a full image gallery).
 
-Judge-facing walkthrough: see [`DEMO.md`](./DEMO.md).
-
 ## Architecture
 
 ```
@@ -142,8 +140,6 @@ on the buyer dashboard and make an offer.
 4. Grade play on **Nike Vintage Tees Mix** — partial A/B selection.
 5. Bonus: firm-price North Face; second browser profile as another buyer.
 
-Full judge script: [`DEMO.md`](./DEMO.md).
-
 ## How the seller agent works
 
 Per buyer turn (`backend/app/agent/`):
@@ -256,7 +252,6 @@ Vision/
 
 ## Related docs
 
-- [`DEMO.md`](./DEMO.md) — live demo script for judges
 - [`backend/app/agent/`](./backend/app/agent/) — seller agent modules
 - [`Vision/vlm/README.md`](./Vision/vlm/README.md) — Gemini / Qwen VLM setup
 - [`Vision/pySceneDetect/README.md`](./Vision/pySceneDetect/README.md) — frame extractor
