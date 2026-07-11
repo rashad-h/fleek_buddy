@@ -9,14 +9,6 @@ import { nitro } from 'nitro/vite'
 
 const config = defineConfig({
   resolve: { tsconfigPaths: true },
-  server: {
-    proxy: {
-      '/api': {
-        target: process.env.BACKEND_URL ?? 'http://localhost:8000',
-        changeOrigin: true,
-      },
-    },
-  },
   plugins: [
     devtools(),
     nitro({ rollupConfig: { external: [/^@sentry\//] } }),
