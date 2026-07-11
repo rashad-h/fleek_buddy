@@ -105,10 +105,14 @@ async def send_message(
         if data.offer_amount is not None
         else None
     )
+    if not data.content.strip() and offer is None:
+        raise HTTPException(status_code=422, detail="Message needs text or an offer")
+
+    content = data.content.strip() or f"I can do £{offer} for the bundle."
     message = Message(
         negotiation_id=negotiation.id,
         role="buyer",
-        content=data.content,
+        content=content,
         offer_amount=offer,
         action="offer" if offer is not None else None,
     )

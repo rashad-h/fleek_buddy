@@ -73,5 +73,7 @@ class NegotiationCreate(BaseModel):
 
 
 class BuyerMessage(BaseModel):
-    content: str = Field(min_length=1)
+    """Content may be empty when the buyer only submits a new offer amount."""
+
+    content: str = ""
     offer_amount: float | None = Field(default=None, gt=0)
