@@ -7,6 +7,7 @@ Create Date: 2026-07-11
 """
 
 import sqlalchemy as sa
+from sqlalchemy.dialects import postgresql
 
 from alembic import op
 
@@ -41,6 +42,7 @@ def upgrade() -> None:
         sa.Column("buying_price", sa.Numeric(10, 2), nullable=False),
         sa.Column("lowest_bundle_price", sa.Numeric(10, 2), nullable=False),
         sa.Column("lowest_price_per_piece", sa.Numeric(10, 2), nullable=False),
+        sa.Column("grades", postgresql.JSONB(), nullable=False, server_default="[]"),
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
     )
 
@@ -51,6 +53,7 @@ def upgrade() -> None:
         sa.Column("buyer_id", sa.String(), nullable=False),
         sa.Column("status", sa.String(), nullable=False, server_default="open"),
         sa.Column("current_offer", sa.Numeric(10, 2), nullable=True),
+        sa.Column("current_selection", postgresql.JSONB(), nullable=True),
         sa.Column("agreed_price", sa.Numeric(10, 2), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
         sa.Column("updated_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
@@ -71,6 +74,7 @@ def upgrade() -> None:
         sa.Column("role", sa.String(), nullable=False),
         sa.Column("content", sa.Text(), nullable=False),
         sa.Column("offer_amount", sa.Numeric(10, 2), nullable=True),
+        sa.Column("offer_selection", postgresql.JSONB(), nullable=True),
         sa.Column("action", sa.String(), nullable=True),
         sa.Column("created_at", sa.DateTime(), nullable=False, server_default=sa.func.now()),
     )

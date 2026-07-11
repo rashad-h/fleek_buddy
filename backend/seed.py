@@ -3,8 +3,16 @@
 Run before a demo (`make seed`). Wipes messages, negotiations and items,
 then inserts the bundles below, so re-runs always give a clean slate.
 
+Prices are calibrated against real Fleek listings (July 2026) and are
+delivered prices: price_per_piece x piece_count = bundle_price, shipping
+included.
+
 Haggle metadata convention: `buying_price` is what the seller paid,
-`lowest_bundle_price` is the hard floor the agent may never go under.
+`lowest_bundle_price` is the floor the agent defends (policy allows a small
+flex below it to close a deal). The per-grade breakdown in `grades` is
+seller-confidential: counts are allocated from the condition's grade mix
+(AB = 70/30, BC = 60/40, ABC = 30/40/30) and per-grade prices sum back to
+the bundle price.
 """
 
 import asyncio
@@ -14,7 +22,31 @@ from typing import TypedDict
 from sqlalchemy import text
 
 from app.db import SessionLocal
-from app.models import Item
+from app.models import GradeInfo, Item
+
+TWO_PLACES = Decimal("0.01")
+
+# Grading allocation for mixed ratios.
+GRADE_RATIOS: dict[str, dict[str, Decimal]] = {
+    "A": {"A": Decimal("1.00")},
+    "AB": {"A": Decimal("0.70"), "B": Decimal("0.30")},
+    "B": {"B": Decimal("1.00")},
+    "BC": {"B": Decimal("0.60"), "C": Decimal("0.40")},
+    "ABC": {"A": Decimal("0.30"), "B": Decimal("0.40"), "C": Decimal("0.30")},
+}
+
+# Relative per-piece value of each grade within one bundle.
+GRADE_MULTIPLIERS: dict[str, Decimal] = {
+    "A": Decimal("1.20"),
+    "B": Decimal("0.95"),
+    "C": Decimal("0.70"),
+}
+
+GRADE_NOTES: dict[str, str] = {
+    "A": "clean, minimal wear, best resale pieces",
+    "B": "light wear, small marks, solid sellers",
+    "C": "visible flaws or repairs, priced to clear",
+}
 
 
 class BundleSeed(TypedDict):
@@ -26,10 +58,10 @@ class BundleSeed(TypedDict):
     description: str
     category: str
     condition: str
+    grade_mix: str
     sizes: str
     piece_count: int
     price_per_piece: str
-    bundle_price: str
     original_price: str | None
     discount_percent: int | None
     shipping_days_min: int
@@ -43,27 +75,27 @@ class BundleSeed(TypedDict):
 
 BUNDLES: list[BundleSeed] = [
     {
-        # Reference listing: joinfleek.com "Under Armour Sexy Shorts".
+        # Reference listing: joinfleek.com "Under Armour And Adidas Sexy Shorts".
         "title": "Under Armour Sexy Shorts",
         "brand": "Under Armour",
         "vendor_name": "Past Perfect Co",
         "description": (
-            "AB-grade vintage Under Armour shorts, single-brand bundle. "
-            "The images show the exact products that are part of the bundle. "
-            "Great resale margins for summer stock."
+            "Vintage Under Armour sport shorts, bold colours and prints. "
+            "Mixed A/B grade as pictured; ask in chat for the exact grade "
+            "split, pictures of individual pieces on request. Great resale "
+            "margins for summer stock."
         ),
         "category": "Womenswear > Shorts",
         "condition": "AB Grade Vintage",
+        "grade_mix": "AB",
         "sizes": "26-38",
-        "piece_count": 23,
-        # Fleek shows per-piece price excluding shipping; the bundle total includes it.
-        "price_per_piece": "4.35",
-        "bundle_price": "171.35",
-        "original_price": "290.00",
-        "discount_percent": 41,
+        "piece_count": 45,
+        "price_per_piece": "2.67",
+        "original_price": "189.90",
+        "discount_percent": 36,
         "shipping_days_min": 20,
         "shipping_days_max": 27,
-        "image_url": "/products/under-armour-sexy-shorts.svg",
+        "image_url": "/products/under-armour-sexy-shorts.jpg",
         "negotiable": True,
         "high_quantity": False,
         "buying_ratio": "0.50",
@@ -75,19 +107,21 @@ BUNDLES: list[BundleSeed] = [
         "vendor_name": "Thrift Empire",
         "description": (
             "Assorted 90s and 00s Nike tees, bold graphics and embroidered "
-            "swooshes. High-volume staple that sells itself."
+            "swooshes. Full A/B/C grade mix so there is stock for every "
+            "price point; grade breakdown shared in chat. High-volume "
+            "staple that sells itself."
         ),
         "category": "Menswear > T-Shirts",
-        "condition": "A Grade Vintage",
+        "condition": "ABC Grade Vintage",
+        "grade_mix": "ABC",
         "sizes": "S-XXL",
-        "piece_count": 45,
-        "price_per_piece": "5.45",
-        "bundle_price": "315.00",
-        "original_price": "420.00",
-        "discount_percent": 25,
+        "piece_count": 40,
+        "price_per_piece": "4.75",
+        "original_price": "245.00",
+        "discount_percent": 22,
         "shipping_days_min": 14,
         "shipping_days_max": 21,
-        "image_url": "/products/nike-vintage-tees.svg",
+        "image_url": "/products/nike-vintage-tees.jpg",
         "negotiable": True,
         "high_quantity": True,
         "buying_ratio": "0.48",
@@ -98,19 +132,21 @@ BUNDLES: list[BundleSeed] = [
         "brand": "Adidas",
         "vendor_name": "Retro Supply",
         "description": (
-            "Classic three-stripe track jackets, 80s-00s mix. Strong colours, all zips checked."
+            "Classic three-stripe track jackets, 80s-00s mix. Strong "
+            "colours, all zips checked. Mixed A/B grade; pictures of "
+            "specific jackets available on request."
         ),
         "category": "Menswear > Jackets",
         "condition": "AB Grade Vintage",
+        "grade_mix": "AB",
         "sizes": "S-XL",
         "piece_count": 18,
-        "price_per_piece": "15.50",
-        "bundle_price": "342.00",
-        "original_price": "450.00",
-        "discount_percent": 24,
+        "price_per_piece": "11.50",
+        "original_price": None,
+        "discount_percent": None,
         "shipping_days_min": 20,
         "shipping_days_max": 27,
-        "image_url": "/products/adidas-track-jackets.svg",
+        "image_url": "/products/adidas-track-jackets.jpg",
         "negotiable": True,
         "high_quantity": False,
         "buying_ratio": "0.52",
@@ -121,20 +157,21 @@ BUNDLES: list[BundleSeed] = [
         "brand": "Carhartt",
         "vendor_name": "Workwear World",
         "description": (
-            "Rugged Carhartt chore coats and detroit jackets. "
-            "Honest wear, no rips. Big stock ready to move."
+            "Rugged Carhartt chore coats and detroit jackets. Honest "
+            "workwear wear, B/C grade mix priced accordingly - the C pieces "
+            "are ideal for rework. Big stock ready to move."
         ),
         "category": "Menswear > Jackets",
-        "condition": "B Grade Vintage",
+        "condition": "BC Grade Workwear",
+        "grade_mix": "BC",
         "sizes": "M-XXL",
-        "piece_count": 30,
-        "price_per_piece": "18.40",
-        "bundle_price": "690.00",
-        "original_price": "920.00",
+        "piece_count": 25,
+        "price_per_piece": "28.50",
+        "original_price": "950.00",
         "discount_percent": 25,
         "shipping_days_min": 20,
         "shipping_days_max": 27,
-        "image_url": "/products/carhartt-work-jackets.svg",
+        "image_url": "/products/carhartt-work-jackets.jpg",
         "negotiable": True,
         "high_quantity": True,
         "buying_ratio": "0.50",
@@ -146,19 +183,20 @@ BUNDLES: list[BundleSeed] = [
         "vendor_name": "Past Perfect Co",
         "description": (
             "Timeless Polo Ralph Lauren shirts, pastel and classic tones. "
-            "Small pony logos, all seasons."
+            "Small pony logos, all seasons. Straight A grade - every piece "
+            "checked, pictures on request."
         ),
         "category": "Menswear > Polos",
         "condition": "A Grade Vintage",
+        "grade_mix": "A",
         "sizes": "S-XL",
-        "piece_count": 25,
-        "price_per_piece": "14.30",
-        "bundle_price": "437.50",
-        "original_price": "560.00",
-        "discount_percent": 22,
+        "piece_count": 15,
+        "price_per_piece": "9.00",
+        "original_price": None,
+        "discount_percent": None,
         "shipping_days_min": 14,
         "shipping_days_max": 21,
-        "image_url": "/products/ralph-lauren-polos.svg",
+        "image_url": "/products/ralph-lauren-polos.jpg",
         "negotiable": True,
         "high_quantity": False,
         "buying_ratio": "0.53",
@@ -169,20 +207,21 @@ BUNDLES: list[BundleSeed] = [
         "brand": "Levi's",
         "vendor_name": "Denim Dealers",
         "description": (
-            "Iconic 501s in medium and dark washes. Graded for minimal wear, "
-            "waist sizes marked on every pair."
+            "Iconic 501s in medium and dark washes, waist sizes marked on "
+            "every pair. Mixed A/B grade - ask for the split and pictures "
+            "of specific pairs in chat."
         ),
         "category": "Unisex > Jeans",
         "condition": "AB Grade Vintage",
+        "grade_mix": "AB",
         "sizes": "W28-W38",
         "piece_count": 20,
-        "price_per_piece": "22.50",
-        "bundle_price": "540.00",
-        "original_price": "720.00",
-        "discount_percent": 25,
+        "price_per_piece": "16.55",
+        "original_price": None,
+        "discount_percent": None,
         "shipping_days_min": 20,
         "shipping_days_max": 27,
-        "image_url": "/products/levis-501-jeans.svg",
+        "image_url": "/products/levis-501-jeans.jpg",
         "negotiable": True,
         "high_quantity": False,
         "buying_ratio": "0.50",
@@ -193,19 +232,20 @@ BUNDLES: list[BundleSeed] = [
         "brand": "The North Face",
         "vendor_name": "Summit Vintage",
         "description": (
-            "Premium TNF fleeces and zip-ups. Scarce stock, prices firm - these never sit for long."
+            "Premium TNF fleeces and zip-ups, straight A grade. Scarce "
+            "stock, prices firm - these never sit for long."
         ),
         "category": "Unisex > Fleeces",
         "condition": "A Grade Vintage",
+        "grade_mix": "A",
         "sizes": "S-XL",
-        "piece_count": 15,
-        "price_per_piece": "29.00",
-        "bundle_price": "525.00",
+        "piece_count": 20,
+        "price_per_piece": "15.75",
         "original_price": None,
         "discount_percent": None,
         "shipping_days_min": 14,
         "shipping_days_max": 21,
-        "image_url": "/products/north-face-fleeces.svg",
+        "image_url": "/products/north-face-fleeces.jpg",
         "negotiable": False,
         "high_quantity": False,
         "buying_ratio": "0.60",
@@ -217,19 +257,20 @@ BUNDLES: list[BundleSeed] = [
         "vendor_name": "Thrift Empire",
         "description": (
             "Reverse-weave and script-logo Champion hoodies, heavyweight "
-            "cotton, muted tones. Winter best-seller."
+            "cotton, muted tones. Full A/B/C grade mix - happy to break "
+            "down the grades and send pictures in chat. Winter best-seller."
         ),
         "category": "Unisex > Hoodies",
-        "condition": "AB Grade Vintage",
+        "condition": "ABC Grade Vintage",
+        "grade_mix": "ABC",
         "sizes": "M-XXL",
         "piece_count": 28,
-        "price_per_piece": "13.60",
-        "bundle_price": "476.00",
-        "original_price": "640.00",
-        "discount_percent": 26,
+        "price_per_piece": "13.50",
+        "original_price": "472.50",
+        "discount_percent": 20,
         "shipping_days_min": 20,
         "shipping_days_max": 27,
-        "image_url": "/products/champion-hoodies.svg",
+        "image_url": "/products/champion-hoodies.jpg",
         "negotiable": True,
         "high_quantity": True,
         "buying_ratio": "0.47",
@@ -240,20 +281,21 @@ BUNDLES: list[BundleSeed] = [
         "brand": "Tommy Hilfiger",
         "vendor_name": "Retro Supply",
         "description": (
-            "90s Tommy crewnecks with flag logos and colour-block knits. "
-            "Clean condition, ready for resale."
+            "90s Tommy crewnecks and quarter-zips with flag logos and "
+            "colour-block knits. Mixed A/B grade, clean condition overall; "
+            "grade split available in chat."
         ),
         "category": "Menswear > Sweatshirts",
-        "condition": "A Grade Vintage",
+        "condition": "AB Grade Vintage",
+        "grade_mix": "AB",
         "sizes": "S-XL",
         "piece_count": 22,
-        "price_per_piece": "15.50",
-        "bundle_price": "418.00",
-        "original_price": "550.00",
-        "discount_percent": 24,
+        "price_per_piece": "15.35",
+        "original_price": None,
+        "discount_percent": None,
         "shipping_days_min": 14,
         "shipping_days_max": 21,
-        "image_url": "/products/tommy-hilfiger-crewnecks.svg",
+        "image_url": "/products/tommy-hilfiger-crewnecks.jpg",
         "negotiable": True,
         "high_quantity": False,
         "buying_ratio": "0.51",
@@ -261,14 +303,51 @@ BUNDLES: list[BundleSeed] = [
     },
 ]
 
-TWO_PLACES = Decimal("0.01")
+
+def allocate_counts(total: int, ratios: dict[str, Decimal]) -> dict[str, int]:
+    """Split `total` pieces across grades by ratio (largest remainder)."""
+    raw = {grade: total * ratio for grade, ratio in ratios.items()}
+    counts = {grade: int(value) for grade, value in raw.items()}
+    leftover = total - sum(counts.values())
+    by_remainder = sorted(raw, key=lambda g: raw[g] - counts[g], reverse=True)
+    for grade in by_remainder[:leftover]:
+        counts[grade] += 1
+    return counts
+
+
+def build_grades(seed: BundleSeed, bundle: Decimal, floor_ratio: Decimal) -> list[GradeInfo]:
+    """Derive the confidential per-grade breakdown.
+
+    Per-grade delivered prices follow the grade multipliers, normalised so
+    they sum back to the bundle price; floors apply the bundle's floor ratio
+    per piece, so a partial selection's floor is the sum of its pieces.
+    """
+    counts = allocate_counts(seed["piece_count"], GRADE_RATIOS[seed["grade_mix"]])
+    weight = sum(count * GRADE_MULTIPLIERS[grade] for grade, count in counts.items())
+    base = bundle / weight
+    grades: list[GradeInfo] = []
+    for grade, count in counts.items():
+        price = (base * GRADE_MULTIPLIERS[grade]).quantize(TWO_PLACES)
+        floor = (price * floor_ratio).quantize(TWO_PLACES)
+        grades.append(
+            {
+                "grade": grade,
+                "count": count,
+                "price_per_piece": str(price),
+                "floor_per_piece": str(floor),
+                "note": GRADE_NOTES[grade],
+            }
+        )
+    return grades
 
 
 def build_item(seed: BundleSeed) -> Item:
-    """Derive per-piece and haggle prices, then build the ORM row."""
-    bundle = Decimal(seed["bundle_price"])
+    """Derive bundle, haggle and grade prices, then build the ORM row."""
+    price_per_piece = Decimal(seed["price_per_piece"])
     pieces = seed["piece_count"]
-    floor = (bundle * Decimal(seed["floor_ratio"])).quantize(TWO_PLACES)
+    bundle = (price_per_piece * pieces).quantize(TWO_PLACES)
+    floor_ratio = Decimal(seed["floor_ratio"])
+    floor = (bundle * floor_ratio).quantize(TWO_PLACES)
     return Item(
         title=seed["title"],
         brand=seed["brand"],
@@ -278,7 +357,7 @@ def build_item(seed: BundleSeed) -> Item:
         condition=seed["condition"],
         sizes=seed["sizes"],
         piece_count=pieces,
-        price_per_piece=Decimal(seed["price_per_piece"]),
+        price_per_piece=price_per_piece,
         bundle_price=bundle,
         original_price=(Decimal(seed["original_price"]) if seed["original_price"] else None),
         discount_percent=seed["discount_percent"],
@@ -290,6 +369,7 @@ def build_item(seed: BundleSeed) -> Item:
         buying_price=(bundle * Decimal(seed["buying_ratio"])).quantize(TWO_PLACES),
         lowest_bundle_price=floor,
         lowest_price_per_piece=(floor / pieces).quantize(TWO_PLACES),
+        grades=build_grades(seed, bundle, floor_ratio),
     )
 
 

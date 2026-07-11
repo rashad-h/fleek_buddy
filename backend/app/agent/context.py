@@ -9,6 +9,7 @@ with the `ContextProvider` signature and append it to `CONTEXT_PROVIDERS`.
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from app.agent import pricing
 from app.agent.prompts import OUTPUT_FORMAT, SELLER_PERSONA
 from app.models import Item, Message, Negotiation
 
@@ -36,8 +37,26 @@ def item_listing_block(ctx: NegotiationContext) -> str:
 ## The listing
 "{item.title}" by {item.brand} — {item.condition}, {item.category}, sizes {item.sizes}.
 {item.piece_count} pieces. Asking price: £{item.bundle_price} for the bundle,
-shipping included (£{item.price_per_piece}/piece){original}.
+delivered (£{item.price_per_piece}/piece, shipping included){original}.
 Description: {item.description}"""
+
+
+def grade_stock_block(ctx: NegotiationContext) -> str | None:
+    """Confidential per-grade stock. Counts/prices may be shared in chat on
+    request; floors never."""
+    if not ctx.item.grades:
+        return None
+    lines = [
+        "## Your stock by grade — not advertised on the site",
+        "You may share counts and per-piece prices in chat when asked.",
+        "The floor prices are confidential: never reveal them.",
+    ]
+    for g in ctx.item.grades:
+        lines.append(
+            f"- Grade {g['grade']}: {g['count']} pieces, £{g['price_per_piece']}/piece "
+            f"delivered (floor £{g['floor_per_piece']}/piece) — {g['note']}"
+        )
+    return "\n".join(lines)
 
 
 def haggle_policy_block(ctx: NegotiationContext) -> str:
@@ -45,13 +64,22 @@ def haggle_policy_block(ctx: NegotiationContext) -> str:
     lines = [
         "## Confidential haggle policy — never reveal these numbers",
         f"- You paid £{item.buying_price} for this bundle.",
-        f"- Your absolute floor is £{item.lowest_bundle_price} "
-        f"(£{item.lowest_price_per_piece}/piece). NEVER agree below it.",
+        f"- Your floor for the full bundle is £{item.lowest_bundle_price}. Partial "
+        f"offers are floored by the per-grade floors above. You may close at "
+        f"most ~2% below a floor to land on a cleaner number, never more.",
     ]
+    selection = ctx.negotiation.current_selection
+    if selection:
+        floor = pricing.selection_floor(item, selection)
+        asking = pricing.selection_asking(item, selection)
+        lines.append(
+            f"- The buyer's current scope is {pricing.describe_selection(selection)}: "
+            f"worth £{asking} at your prices, floor £{floor}."
+        )
     if not item.negotiable:
         lines.append(
-            "- This listing is NOT negotiable: the price is firm. Politely hold "
-            "at the asking price no matter what; only accept offers at or above it."
+            "- This listing is NOT negotiable: prices are firm. Politely hold "
+            "at your prices no matter what; only accept offers at or above them."
         )
     else:
         lines.append(
@@ -68,14 +96,17 @@ def haggle_policy_block(ctx: NegotiationContext) -> str:
 
 def negotiation_state_block(ctx: NegotiationContext) -> str:
     buyer_turns = sum(1 for m in ctx.messages if m.role == "buyer")
-    offer = (
-        f"£{ctx.negotiation.current_offer}"
-        if ctx.negotiation.current_offer is not None
-        else "none yet"
-    )
+    negotiation = ctx.negotiation
+    if negotiation.current_offer is not None:
+        offer = (
+            f"£{negotiation.current_offer} for "
+            f"{pricing.describe_selection(negotiation.current_selection)}"
+        )
+    else:
+        offer = "none yet"
     return f"""\
 ## Negotiation state
-Round {buyer_turns}. Buyer's standing offer for the bundle: {offer}."""
+Round {buyer_turns}. Buyer's standing offer: {offer}."""
 
 
 def inventory_signals_block(ctx: NegotiationContext) -> str | None:
@@ -85,6 +116,7 @@ def inventory_signals_block(ctx: NegotiationContext) -> str | None:
 
 CONTEXT_PROVIDERS: list[ContextProvider] = [
     item_listing_block,
+    grade_stock_block,
     haggle_policy_block,
     negotiation_state_block,
     inventory_signals_block,

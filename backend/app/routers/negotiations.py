@@ -6,10 +6,16 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.agent import negotiator
+from app.agent import negotiator, pricing
 from app.db import get_session
-from app.models import Item, Message, Negotiation
-from app.schemas import BuyerMessage, NegotiationCreate, NegotiationDetail, NegotiationRead
+from app.models import Item, Message, Negotiation, SelectionEntry
+from app.schemas import (
+    BuyerMessage,
+    NegotiationCreate,
+    NegotiationDetail,
+    NegotiationRead,
+    OfferSelection,
+)
 
 router = APIRouter(prefix="/negotiations", tags=["negotiations"])
 
@@ -33,6 +39,14 @@ def _require_open(negotiation: Negotiation) -> None:
         raise HTTPException(status_code=409, detail=f"Negotiation is {negotiation.status}")
 
 
+def _selection_entries(
+    selection: list[OfferSelection] | None,
+) -> list[SelectionEntry] | None:
+    if not selection:
+        return None
+    return pricing.normalize([entry.model_dump() for entry in selection])
+
+
 def _agent_response(session: AsyncSession, negotiation: Negotiation) -> StreamingResponse:
     return StreamingResponse(
         negotiator.respond_stream(
@@ -54,17 +68,26 @@ async def create_negotiation(
         raise HTTPException(status_code=404, detail="Item not found")
 
     offer = Decimal(str(data.offer_price)).quantize(Decimal("0.01"))
-    negotiation = Negotiation(item_id=item.id, buyer_id=data.buyer_id, current_offer=offer)
+    selection = _selection_entries(data.selection)
+    negotiation = Negotiation(
+        item_id=item.id,
+        buyer_id=data.buyer_id,
+        current_offer=offer,
+        current_selection=selection,
+    )
     session.add(negotiation)
     await session.flush()
 
-    content = data.message or (f"Hi! I'd like to offer £{offer} for the full bundle.")
+    content = data.message or (
+        f"Hi! I'd like to offer £{offer} for {pricing.describe_selection(selection)}."
+    )
     session.add(
         Message(
             negotiation_id=negotiation.id,
             role="buyer",
             content=content,
             offer_amount=offer,
+            offer_selection=selection,
             action="offer",
         )
     )
@@ -108,12 +131,21 @@ async def send_message(
     if not data.content.strip() and offer is None:
         raise HTTPException(status_code=422, detail="Message needs text or an offer")
 
-    content = data.content.strip() or f"I can do £{offer} for the bundle."
+    # A new selection only takes effect together with a new offer amount.
+    selection = _selection_entries(data.selection) if offer is not None else None
+    if offer is not None and selection is not None:
+        negotiation.current_selection = selection
+    scope = negotiation.current_selection
+
+    content = data.content.strip() or (
+        f"I can do £{offer} for {pricing.describe_selection(scope)}."
+    )
     message = Message(
         negotiation_id=negotiation.id,
         role="buyer",
         content=content,
         offer_amount=offer,
+        offer_selection=scope if offer is not None else None,
         action="offer" if offer is not None else None,
     )
     if offer is not None:
@@ -123,3 +155,43 @@ async def send_message(
 
     negotiation = await _load_negotiation(session, negotiation_id)
     return _agent_response(session, negotiation)
+
+
+@router.post("/{negotiation_id}/accept", response_model=NegotiationDetail)
+async def accept_counter(
+    negotiation_id: int, session: AsyncSession = Depends(get_session)
+) -> Negotiation:
+    """The buyer accepts the seller's standing counter-offer; locks the deal."""
+    negotiation = await _load_negotiation(session, negotiation_id)
+    _require_open(negotiation)
+
+    counter = next(
+        (
+            m
+            for m in reversed(negotiation.messages)
+            if m.role == "agent" and m.action == "counter" and m.offer_amount is not None
+        ),
+        None,
+    )
+    if counter is None:
+        raise HTTPException(status_code=409, detail="No seller offer to accept")
+
+    negotiation.status = "accepted"
+    negotiation.current_offer = counter.offer_amount
+    negotiation.current_selection = counter.offer_selection
+    negotiation.agreed_price = counter.offer_amount
+    session.add(
+        Message(
+            negotiation_id=negotiation.id,
+            role="buyer",
+            content=(
+                f"Deal — £{counter.offer_amount} for "
+                f"{pricing.describe_selection(counter.offer_selection)}."
+            ),
+            offer_amount=counter.offer_amount,
+            offer_selection=counter.offer_selection,
+            action="accept",
+        )
+    )
+    await session.commit()
+    return await _load_negotiation(session, negotiation_id)

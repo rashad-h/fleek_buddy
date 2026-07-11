@@ -1,8 +1,32 @@
 from datetime import datetime
 from decimal import Decimal
+from typing import TypedDict
 
 from sqlalchemy import ForeignKey, Index, Numeric, Text, func
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import DeclarativeBase, Mapped, mapped_column, relationship
+
+
+class GradeInfo(TypedDict):
+    """Seller-confidential stock breakdown for one grade within a bundle.
+
+    Prices are delivered (shipping included) so a partial selection's asking
+    and floor prices sum directly from these. Money is stored as strings to
+    keep JSON exact; convert with Decimal when computing.
+    """
+
+    grade: str
+    count: int
+    price_per_piece: str
+    floor_per_piece: str
+    note: str
+
+
+class SelectionEntry(TypedDict):
+    """One line of a partial offer: how many pieces of one grade."""
+
+    grade: str
+    quantity: int
 
 
 class Base(DeclarativeBase):
@@ -12,9 +36,9 @@ class Base(DeclarativeBase):
 class Item(Base):
     """A wholesale clothing bundle listed on the marketplace.
 
-    `buying_price`, `lowest_bundle_price` and `lowest_price_per_piece` are the
-    seller's confidential haggle metadata: they drive the negotiation agent and
-    must never be exposed through the public API.
+    `buying_price`, `lowest_bundle_price`, `lowest_price_per_piece` and
+    `grades` are the seller's confidential haggle metadata: they drive the
+    negotiation agent and must never be exposed through the public API.
     """
 
     __tablename__ = "items"
@@ -42,6 +66,7 @@ class Item(Base):
     buying_price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     lowest_bundle_price: Mapped[Decimal] = mapped_column(Numeric(10, 2))
     lowest_price_per_piece: Mapped[Decimal] = mapped_column(Numeric(10, 2))
+    grades: Mapped[list[GradeInfo]] = mapped_column(JSONB, default=list)
 
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 
@@ -59,6 +84,8 @@ class Negotiation(Base):
     buyer_id: Mapped[str] = mapped_column(index=True)
     status: Mapped[str] = mapped_column(default="open")
     current_offer: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), default=None)
+    # None means the offer covers the full bundle.
+    current_selection: Mapped[list[SelectionEntry] | None] = mapped_column(JSONB, default=None)
     agreed_price: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), default=None)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(server_default=func.now(), onupdate=func.now())
@@ -79,6 +106,7 @@ class Message(Base):
     role: Mapped[str]
     content: Mapped[str] = mapped_column(Text)
     offer_amount: Mapped[Decimal | None] = mapped_column(Numeric(10, 2), default=None)
+    offer_selection: Mapped[list[SelectionEntry] | None] = mapped_column(JSONB, default=None)
     action: Mapped[str | None] = mapped_column(default=None)
     created_at: Mapped[datetime] = mapped_column(server_default=func.now())
 

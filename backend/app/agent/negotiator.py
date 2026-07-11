@@ -21,6 +21,7 @@ from decimal import Decimal
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app import llm
+from app.agent import pricing
 from app.agent.context import NegotiationContext, build_chat_messages
 from app.agent.policy import (
     apply_guardrails,
@@ -41,7 +42,10 @@ def _sse(event: str, data: dict) -> str:
 
 def _needs_firm_reply(ctx: NegotiationContext) -> bool:
     offer = ctx.negotiation.current_offer
-    return not ctx.item.negotiable and offer is not None and offer < ctx.item.bundle_price
+    if ctx.item.negotiable or offer is None:
+        return False
+    asking = pricing.selection_asking(ctx.item, ctx.negotiation.current_selection)
+    return offer < asking
 
 
 async def decide(ctx: NegotiationContext) -> AgentDecision:
@@ -68,11 +72,23 @@ async def _persist(
     elif decision.action == "reject":
         negotiation.status = "rejected"
 
+    if decision.action == "counter":
+        # A counter without its own selection applies to the buyer's scope;
+        # store that scope so later turns compare like with like.
+        counter_selection = (
+            [entry.model_dump() for entry in decision.selection]
+            if decision.selection
+            else negotiation.current_selection
+        )
+    else:
+        counter_selection = None
+
     message = Message(
         negotiation_id=negotiation.id,
         role="agent",
         content=decision.message,
         offer_amount=(Decimal(str(decision.price)) if decision.action == "counter" else None),
+        offer_selection=counter_selection,
         action=decision.action,
     )
     session.add(message)
@@ -107,6 +123,7 @@ async def respond_stream(
         {
             "action": decision.action,
             "price": decision.price,
+            "selection": stored.offer_selection,
             "status": negotiation.status,
             "message_id": stored.id,
         },

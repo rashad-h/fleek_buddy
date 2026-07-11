@@ -1,14 +1,20 @@
 """Deterministic guardrails applied on top of every LLM decision.
 
 The LLM proposes; this module disposes. Whatever the model hallucinates,
-these rules guarantee the seller never sells below the floor, counters stay
-inside sensible bounds, and concessions only ever move downwards.
+these rules guarantee the seller never sells below the (flexed) floor for
+the exact pieces on the table, counters stay inside sensible bounds, and
+concessions on an unchanged scope only ever move downwards.
+
+The floor is applied with a small flex (`pricing.FLOOR_FLEX`): closing a
+touch below the floor to hit a cleaner number is allowed, by design.
 """
 
 from decimal import Decimal
 
+from app.agent import pricing
 from app.agent.context import NegotiationContext
 from app.agent.schemas import AgentDecision
+from app.models import SelectionEntry
 
 TWO_PLACES = Decimal("0.01")
 
@@ -17,26 +23,50 @@ def _to_money(value: float | Decimal) -> Decimal:
     return Decimal(str(value)).quantize(TWO_PLACES)
 
 
-def previous_counter(ctx: NegotiationContext) -> Decimal | None:
-    """The agent's most recent counter-offer, if any."""
+def previous_counter(
+    ctx: NegotiationContext,
+) -> tuple[Decimal, list[SelectionEntry] | None] | None:
+    """The agent's most recent counter (amount, selection), if any."""
     for message in reversed(ctx.messages):
         if message.role == "agent" and message.action == "counter":
             if message.offer_amount is not None:
-                return message.offer_amount
+                return message.offer_amount, pricing.normalize(message.offer_selection)
     return None
 
 
+def _cap_selection(
+    ctx: NegotiationContext, selection: list[SelectionEntry] | None
+) -> list[SelectionEntry] | None:
+    """Clamp a proposed selection to grades and counts the seller holds."""
+    normalized = pricing.normalize(selection)
+    if normalized is None:
+        return None
+    grades = pricing.grade_map(ctx.item)
+    capped = [
+        {"grade": e["grade"], "quantity": min(e["quantity"], grades[e["grade"]]["count"])}
+        for e in normalized
+        if e["grade"] in grades
+    ]
+    capped = [e for e in capped if e["quantity"] > 0]
+    return capped or None
+
+
 def firm_price_reply(ctx: NegotiationContext) -> AgentDecision:
-    """Canned response for non-negotiable listings offered below asking."""
+    """Canned response for non-negotiable listings offered below the price."""
     item = ctx.item
+    selection = pricing.normalize(ctx.negotiation.current_selection)
+    if selection is None:
+        quote = f"£{item.bundle_price} for the full bundle"
+    else:
+        asking = pricing.selection_asking(item, selection)
+        quote = f"£{asking} for {pricing.describe_selection(selection)}"
     return AgentDecision(
         action="chat",
         price=None,
         message=(
-            f"Appreciate the interest, but the price on this one is firm at "
-            f"£{item.bundle_price} — {item.condition} {item.brand} at "
-            f"£{item.price_per_piece}/piece is already sharp. Happy to answer "
-            f"any questions about the bundle."
+            f"Appreciate the interest, but prices on this one are firm — {quote}, "
+            f"delivered. {item.condition} {item.brand} at this level is already "
+            f"sharp. Happy to answer any questions about the stock."
         ),
     )
 
@@ -46,9 +76,7 @@ def fallback_reply() -> AgentDecision:
     return AgentDecision(
         action="chat",
         price=None,
-        message=(
-            "Sorry, I lost my train of thought there. Could you repeat your offer for the bundle?"
-        ),
+        message=("Sorry, I lost my train of thought there. Could you repeat your offer?"),
     )
 
 
@@ -57,46 +85,65 @@ def apply_guardrails(decision: AgentDecision, ctx: NegotiationContext) -> AgentD
 
     Rules, in order:
     - accept without a standing offer becomes a chat asking for a number
-    - accept below the floor becomes a counter at max(floor, midpoint)
-    - counters are clamped to [floor, asking] and never rise above the
-      agent's previous counter (concessions are monotonic)
-    - a counter at or below the buyer's valid standing offer becomes an accept
+    - accept below the flexed floor for the buyer's scope becomes a counter
+    - counter selections are capped to real stock; counter prices are
+      clamped to [flexed floor, asking] for that scope and never rise above
+      the agent's previous counter on the same scope
+    - a counter is converted to an accept when the buyer's valid standing
+      offer already meets the clamped price on the same scope
     """
     item = ctx.item
-    floor = item.lowest_bundle_price
-    asking = item.bundle_price
     offer = ctx.negotiation.current_offer
+    buyer_scope = pricing.normalize(ctx.negotiation.current_selection)
     prev = previous_counter(ctx)
-    ceiling = min(asking, prev) if prev is not None else asking
 
     if decision.action == "accept":
         if offer is None:
             return AgentDecision(
                 action="chat",
                 price=None,
-                message="Sounds promising — what price did you have in mind for the bundle?",
+                message="Sounds promising — what price did you have in mind?",
             )
-        if offer < floor:
+        floor = pricing.selection_floor(item, buyer_scope)
+        if offer < pricing.flex_floor(floor):
+            asking = pricing.selection_asking(item, buyer_scope)
+            ceiling = min(asking, prev[0]) if prev and prev[1] == buyer_scope else asking
             counter = max(floor, _to_money((offer + ceiling) / 2))
             return AgentDecision(
                 action="counter",
                 price=float(counter),
+                selection=None,
                 message=(
                     f"I can't go quite that low, but let's make it work — "
-                    f"£{counter} for the full bundle and we have a deal."
+                    f"£{counter} for {pricing.describe_selection(buyer_scope)} "
+                    f"and we have a deal."
                 ),
             )
         return decision
 
     if decision.action == "counter":
+        raw_selection = [e.model_dump() for e in decision.selection] if decision.selection else None
+        scope = _cap_selection(ctx, raw_selection) or buyer_scope
+        floor = pricing.selection_floor(item, scope)
+        hard_floor = pricing.flex_floor(floor)
+        asking = pricing.selection_asking(item, scope)
+        ceiling = min(asking, prev[0]) if prev and prev[1] == scope else asking
+
         price = _to_money(decision.price) if decision.price is not None else ceiling
-        price = max(floor, min(price, ceiling))
-        if offer is not None and offer >= floor and offer >= price:
+        price = max(hard_floor, min(price, ceiling))
+        if offer is not None and scope == buyer_scope and offer >= hard_floor and offer >= price:
             return AgentDecision(
                 action="accept",
                 price=None,
+                selection=None,
                 message=f"You know what — £{offer} works. Deal!",
             )
-        return AgentDecision(action="counter", price=float(price), message=decision.message)
+        counter_selection = None if scope == buyer_scope else scope
+        return AgentDecision(
+            action="counter",
+            price=float(price),
+            selection=counter_selection,
+            message=decision.message,
+        )
 
     return decision
