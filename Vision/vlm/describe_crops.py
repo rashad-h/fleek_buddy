@@ -27,7 +27,7 @@ from litellm.exceptions import (
 from pydantic import ValidationError
 
 from prompts import build_messages
-from schema import CropListing, GarmentAttributes
+from schema import CropListing, GarmentAttributes, derive_suggested_stance
 
 IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".webp", ".bmp"}
 
@@ -154,22 +154,6 @@ def short_error(exc: Exception) -> str:
     return f"{type(exc).__name__}: {text[:240]}"
 
 
-def failed_listing(image_path: Path, model: str, error: str) -> CropListing:
-    return CropListing(
-        crop_path=str(image_path),
-        attributes=GarmentAttributes(
-            category="unknown",
-            color_primary="unknown",
-            short_title="Needs review",
-            description="Automatic extraction failed.",
-            confidence=0.0,
-            needs_review=True,
-        ),
-        model=model,
-        error=error,
-    )
-
-
 def call_completion(
     *,
     model: str,
@@ -205,6 +189,34 @@ def call_completion(
     raise last_exc
 
 
+def _listing_from_attributes(
+    image_path: Path,
+    attributes: GarmentAttributes,
+    *,
+    model: str,
+    error: str | None = None,
+) -> CropListing:
+    return CropListing(
+        crop_path=str(image_path),
+        attributes=attributes,
+        suggested_stance=derive_suggested_stance(attributes),
+        model=model,
+        error=error,
+    )
+
+
+def _failed_listing(image_path: Path, *, model: str, error: str) -> CropListing:
+    attributes = GarmentAttributes(
+        category="unknown",
+        color_primary="unknown",
+        short_title="Needs review",
+        description="Automatic extraction failed.",
+        confidence=0.0,
+        needs_review=True,
+    )
+    return _listing_from_attributes(image_path, attributes, model=model, error=error)
+
+
 def describe_image(
     image_path: Path,
     *,
@@ -222,11 +234,7 @@ def describe_image(
         )
         raw = response.choices[0].message.content or ""
         attributes = parse_attributes(raw)
-        return CropListing(
-            crop_path=str(image_path),
-            attributes=attributes,
-            model=model,
-        )
+        return _listing_from_attributes(image_path, attributes, model=model)
     except (ValidationError, json.JSONDecodeError) as exc:
         try:
             response = call_completion(
@@ -243,19 +251,15 @@ def describe_image(
             )
             raw = response.choices[0].message.content or ""
             attributes = parse_attributes(raw)
-            return CropListing(
-                crop_path=str(image_path),
-                attributes=attributes,
-                model=model,
-            )
+            return _listing_from_attributes(image_path, attributes, model=model)
         except Exception as nested:
-            return failed_listing(
+            return _failed_listing(
                 image_path,
-                model,
-                f"{short_error(exc)} | retry: {short_error(nested)}",
+                model=model,
+                error=f"{short_error(exc)} | retry: {short_error(nested)}",
             )
     except Exception as exc:
-        return failed_listing(image_path, model, short_error(exc))
+        return _failed_listing(image_path, model=model, error=short_error(exc))
 
 
 def describe_image_with_retries(
@@ -373,6 +377,7 @@ def main() -> None:
             attrs = listing.attributes
             print(
                 f"  {attrs.short_title} | {attrs.color_primary} | "
+                f"stance={listing.suggested_stance} | "
                 f"conf={attrs.confidence:.2f} review={attrs.needs_review}"
             )
         # Save progress after each image so a mid-run fail still keeps results.

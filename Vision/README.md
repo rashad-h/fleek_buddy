@@ -38,31 +38,30 @@ Specialize early, generalize late: detectors/trackers find garments over time; V
 
 ```text
 Video + text prompts
-  → SAM 3 (HF) detect + segment + track
-  → best-frame pick + crop
-  → dedupe tracks
-  → VLM metadata on final crops
+  → SAM 3 coarse track (sparse frames)
+  → split into target_items
+  → local video refine (best full frame per item)
+  → VLM metadata on those frames
   → FleekSort handoff
 ```
 
 | Stage | Model | Job |
 |---|---|---|
-| Detect + segment + track | **SAM 3** (`facebook/sam3` via Transformers) | Primary spine — try first |
-| Fallback | Grounded SAM 2 | If SAM 3 setup/quality fails |
-| Best frame / quality | OpenCV heuristics | Sharpness, size, occlusion |
-| Dedupe | CLIP / SigLIP | Merge near-duplicate tracks |
-| Attributes | Qwen2.5-VL or Gemini | Category, color, type on final crops only |
+| Detect + segment + track | **SAM 3** (sparse) | Find when items appear |
+| Best frame | OpenCV local refine | Sharp / low-clutter frame near each slot |
+| Attributes | Gemini or Qwen (`Vision/vlm/`) | Catalog JSON on final frames |
 
-Code + isolated env: [`Vision/sam3/`](sam3/).
+Code:
+- Isolation spine: [`Vision/sam3/`](sam3/)
+- Frames → metadata: [`Vision/vlm/`](vlm/)
 
 ## MVP
 
 - Upload a supplier video
-- SAM 3 text prompts → tracks with stable IDs → best crop per track
-- Dedupe near-identical tracks
-- VLM metadata (category / color / type)
-- Export bundle for FleekSort (`crop`, optional mask, `quality_score`, timestamp)
-- `needs_review` queue for low-confidence tracks
+- Coarse SAM → N best full frames (`--target-items`, `--hand-region`, local refine)
+- VLM metadata on those frames
+- Export bundle for FleekSort
+- `needs_review` queue for low-confidence items
 
 ## Stretch Goals
 

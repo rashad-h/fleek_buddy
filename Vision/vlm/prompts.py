@@ -15,9 +15,14 @@ front-most garment being held up / presented to the camera.
 Rules:
 - Describe that primary garment only. Ignore the background rack, wall, hangers,
   and the person's hand/arm unless they obscure the item.
-- Use only what is visible. Do not invent brands, sizes, or defects.
-- If text/logo is unreadable, set brand to null and omit guessed text.
-- Prefer plain catalog language (jacket, coat, hoodie) over marketing fluff.
+- Use only what is visible. Do not invent brands, sizes, prices, or defects.
+- If text/logo is unreadable, set brand to null and brand_tier to unknown.
+- brand_tier: luxury / premium / mid / fast_fashion / unknown (from brand only).
+- defect_severity: none if no visible damage; else minor or major.
+- talking_points: at most 3 short, concrete seller points from the image.
+- buyer_objection_risks: at most 3 risks a buyer might raise (blur, missing size
+  tag, wear, occlusion). Empty list if none.
+- Prefer plain catalog language over marketing fluff.
 - Set needs_review=true when the frame is blurry, heavily occluded, or you are
   unsure about category/brand/color.
 - confidence is your overall certainty from 0 to 1.
@@ -45,8 +50,8 @@ def build_messages(
     )
     user_text = (
         f"{hint}"
-        "Describe the front-most garment in this frame for a catalog listing. "
-        "Fill every schema field; use null/empty lists when unknown."
+        "Describe the front-most garment for a wholesale listing and negotiation "
+        "context. Fill every schema field; use null/empty lists when unknown."
     )
     return [
         {"role": "system", "content": SYSTEM_PROMPT},

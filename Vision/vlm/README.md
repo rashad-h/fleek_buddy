@@ -45,12 +45,19 @@ Use **`gemini-3.5-flash`** (default). `gemini-2.5-flash` returns 404 for many ne
 
 `listings_frames.json` entries include:
 
-- `category`, `subcategory`, `brand`
-- `color_primary` / `color_secondary`
-- `pattern`, `material_guess`, `gender_style`
-- `visible_text`, `condition_visible`, `defects_visible`
+**Listing**
+- `category`, `subcategory`, `brand`, `brand_tier`
+- `color_primary` / `color_secondary`, `pattern`, `visible_text`
+- `condition_visible`, `defects_visible`, `defect_severity`
 - `short_title`, `description`
 - `confidence`, `needs_review`
+
+**Negotiation (lean)**
+- `talking_points` (≤3) — what the seller can cite
+- `buyer_objection_risks` (≤3) — likely buyer pushback
+- `suggested_stance` — `firm` / `balanced` / `flexible` (derived in code, not from Gemini)
+
+Skipped on purpose (cost / unreliable from a single frame): size, era, seasonality, retail comps, exact prices.
 
 ## Layout
 
