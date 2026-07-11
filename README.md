@@ -3,7 +3,10 @@
 A Fleek-style wholesale marketplace demo where **you are the buyer** and every
 listing is defended by an **LLM seller agent** that haggles with you in a
 real-time chat: it counters, holds firm, accepts or walks away based on each
-item's confidential haggle metadata.
+item's confidential haggle metadata. Offers can cover the full bundle or just
+specific grades (e.g. "10× Grade A + 5× Grade B"), and the seller negotiates
+price *and* quantities — upselling other grades, correcting availability, and
+rewarding bigger takes.
 
 ## Architecture
 
@@ -51,25 +54,37 @@ Do this ~10 minutes before demoing:
 
 ## Demo script
 
-1. Dashboard → open **Under Armour Sexy Shorts** (£171.35 bundle, £4.35/pc).
-2. Click **Make an offer**, offer **£90** — the chat drawer opens and the
-   agent counters in real time (it will never go below its hidden floor).
-3. Haggle in the chat; send **£140** as a new offer ("Offer £" field).
-4. The agent accepts around there → gold "transaction complete" banner, chat
-   locks.
-5. Bonus: show the North Face item refusing to budge, or open a second
+1. Dashboard → open **Under Armour Sexy Shorts** (£120.15 bundle, £2.67/pc,
+   45 pieces — the real Fleek listing, photo included).
+2. Click **Make an offer**, offer **£70** — the chat drawer opens and the
+   agent counters in real time (it never goes meaningfully below its hidden
+   floor of ~£96; a ~2% flex to close on a round number is allowed).
+3. Haggle in the chat; send **£100** as a new offer ("Offer £" field), or
+   hit the gold **Accept seller's offer** button under any counter.
+4. Deal → gold "transaction complete" banner, chat locks.
+5. Grade play: open **Nike Vintage Tees Mix**, toggle **Offer on specific
+   grades only**, ask for 10× A + 5× B — the seller prices that subset and
+   upsells the rest. Ask "how many A-grade do you have?" (he knows the split
+   even though the listing doesn't show it) or ask for photos (he'll promise
+   pictures later).
+6. Bonus: show the North Face item refusing to budge, or open a second
    browser profile to run a parallel negotiation as another buyer.
 
 ## How the seller agent works
 
 Per buyer turn, the backend builds a context from pluggable providers
-(`backend/app/agent/context.py`): listing facts, the confidential haggle
-policy (cost, floor price, `negotiable`, `high_quantity` flags), and the
-negotiation state. One LiteLLM call returns a structured decision
-(`counter | accept | reject | chat` + price + message); code-level guardrails
-(`policy.py`) then clamp it — accepts below the floor become counters,
-counters can only move downwards, non-negotiable items short-circuit the LLM
-entirely. The final message streams to the browser as SSE tokens.
+(`backend/app/agent/context.py`): listing facts, the confidential per-grade
+stock (counts, per-piece prices and floors — shareable in chat on request,
+floors never), the haggle policy (cost, floors, `negotiable`,
+`high_quantity`), and the negotiation state including the offer's scope. One
+LiteLLM call returns a structured decision (`counter | accept | reject |
+chat` + price + grade selection + message); code-level guardrails
+(`policy.py`) then clamp it — accepts below the floor *for those exact
+pieces* become counters, counter selections are capped to real stock,
+counters on an unchanged scope only move downwards, and non-negotiable items
+short-circuit the LLM entirely. Floors allow a small closing flex
+(`pricing.FLOOR_FLEX`, 2%): £135 against a £137 floor is a deal, £120 is
+not. The final message streams to the browser as SSE tokens.
 
 To enrich the agent with a new context source, add one function to
 `CONTEXT_PROVIDERS` in `context.py`.
@@ -77,9 +92,13 @@ To enrich the agent with a new context source, add one function to
 ## Item haggle metadata
 
 Each seeded item carries (never exposed via the API): `buying_price` (what
-the seller paid), `lowest_bundle_price` / `lowest_price_per_piece` (hard
-floor), plus public flags `negotiable` and `high_quantity` (high stock makes
-the agent concede faster). Tune them in `backend/seed.py`.
+the seller paid), `lowest_bundle_price` / `lowest_price_per_piece` (floor),
+and `grades` — the per-grade stock breakdown (count, delivered price/piece,
+floor/piece). Counts are allocated from the condition label per the grading
+ratios (AB → 70/30, BC → 60/40, ABC → 30/40/30) and per-grade prices sum
+back to the bundle price. Public flags: `negotiable` and `high_quantity`
+(high stock makes the agent concede faster). Tune everything in
+`backend/seed.py`.
 
 ## Environment variables (root `.env`)
 
